@@ -1,6 +1,0 @@
-# Escludi tutti i file CSV
-*.csv
-*.toml
-*.gitignore
-# Mantieni un file CSV specifico (se necessario)
-# !example.csv
