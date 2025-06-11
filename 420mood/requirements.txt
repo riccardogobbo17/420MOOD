@@ -1,4 +1,4 @@
 streamlit
-supabase-py==1.0.3
+supabase==1.0.3
 pandas
 numpy
