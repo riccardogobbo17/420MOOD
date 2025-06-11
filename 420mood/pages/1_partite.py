@@ -29,9 +29,9 @@ def calcola_tempo_effettivo(df):
     df_eff = df.copy()
     df_eff['posizione_sec'] = df_eff['posizione'].apply(to_seconds)
     idx_start = 0
-    idx_fine_primo = df_eff[df_eff['evento'] == 'Fine primo tempo'].index[0]
+    idx_fine_primo = df_eff[df_eff['evento'].str.lower() == 'fine primo tempo'].index[0]
     idx_start_secondo = idx_fine_primo + 1
-    idx_fine_partita = df_eff[df_eff['evento'] == 'Fine partita'].index[0]
+    idx_fine_partita = df_eff[df_eff['evento'].str.lower() == 'fine partita'].index[0]
     t_start = df_eff.loc[idx_start, 'posizione_sec']
     t_fine_primo = df_eff.loc[idx_fine_primo, 'posizione_sec']
     t_start_secondo = df_eff.loc[idx_start_secondo, 'posizione_sec']
@@ -53,8 +53,8 @@ def calcola_tempo_effettivo(df):
     return df_eff
 
 def filtra_per_tempo(df, tempo='primo'):
-    idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
-    idx_fine_partita = df[df['evento'] == 'Fine partita'].index[0]
+    idx_fine_primo = df[df['evento'].str.lower() == 'fine primo tempo'].index[0]
+    idx_fine_partita = df[df['evento'].str.lower() == 'fine partita'].index[0]
     if tempo == 'primo':
         return df.loc[:idx_fine_primo]
     elif tempo == 'secondo':
@@ -62,17 +62,28 @@ def filtra_per_tempo(df, tempo='primo'):
     return df
 
 def conta_eventi(df_parziale, evento):
-    fatti = len(df_parziale[(df_parziale['evento'] == evento) & (df_parziale['squadra'] != 'Loro')])
-    subiti = len(df_parziale[(df_parziale['evento'] == evento) & (df_parziale['squadra'] == 'Loro')])
+    evento = evento.lower()
+    fatti = len(df_parziale[(df_parziale['evento'].str.lower() == evento) & (df_parziale['squadra'].str.lower() != 'loro')])
+    subiti = len(df_parziale[(df_parziale['evento'].str.lower() == evento) & (df_parziale['squadra'].str.lower() == 'loro')])
     return fatti, subiti
 
-def analizza_tiri_gol(df):
-    return {
-        'Gol fatti': len(df[(df['evento'] == 'Gol') & (df['squadra'] != 'Loro')]),
-        'Gol subiti': len(df[(df['evento'] == 'Gol') & (df['squadra'] == 'Loro')]),
-        'Tiri fatti': len(df[(df['evento'] == 'Tiro') & (df['squadra'] != 'Loro')]),
-        'Tiri subiti': len(df[(df['evento'] == 'Tiro') & (df['squadra'] == 'Loro')]),
+def riepilogo_eventi_divisi(df_primo, df_secondo, eventi_da_contare):
+    dati_eventi = {
+        "Evento": [], "Fatti primo tempo": [], "Subiti primo tempo": [],
+        "Fatti secondo tempo": [], "Subiti secondo tempo": [],
+        "Fatti totali": [], "Subiti totali": []
     }
+    for evento in eventi_da_contare:
+        fatti_1t, subiti_1t = conta_eventi(df_primo, evento)
+        fatti_2t, subiti_2t = conta_eventi(df_secondo, evento)
+        dati_eventi["Evento"].append(evento)
+        dati_eventi["Fatti primo tempo"].append(fatti_1t)
+        dati_eventi["Subiti primo tempo"].append(subiti_1t)
+        dati_eventi["Fatti secondo tempo"].append(fatti_2t)
+        dati_eventi["Subiti secondo tempo"].append(subiti_2t)
+        dati_eventi["Fatti totali"].append(fatti_1t + fatti_2t)
+        dati_eventi["Subiti totali"].append(subiti_1t + subiti_2t)
+    return pd.DataFrame(dati_eventi)
 
 # === INTERFACCIA ===
 st.title("Tutte le partite disponibili")
@@ -104,51 +115,32 @@ if "partita_scelta" in st.session_state:
     if df.empty:
         st.warning("Nessun evento trovato per questa partita.")
     else:
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
         df['tempoReale_sec'] = df['posizione'].apply(to_seconds)
         df = calcola_tempo_effettivo(df)
 
-        # Eventi per tempo
         df_primo = filtra_per_tempo(df, 'primo')
         df_secondo = filtra_per_tempo(df, 'secondo')
 
-        # Conteggio eventi
         eventi_da_contare = ['Gol', 'Tiri', 'Parate', 'Angolo', 'Laterale', 'Fallo', 'Ammonizione', 'Espulsione', 'Timeout', '3v2', '2v1']
-        dati_eventi = {"Evento": [], "Fatti primo tempo": [], "Subiti primo tempo": [], "Fatti secondo tempo": [], "Subiti secondo tempo": [], "Fatti totali": [], "Subiti totali": []}
+        df_eventi = riepilogo_eventi_divisi(df_primo, df_secondo, eventi_da_contare)
 
-        for evento in eventi_da_contare:
-            fatti_1t, subiti_1t = conta_eventi(df_primo, evento)
-            fatti_2t, subiti_2t = conta_eventi(df_secondo, evento)
-            dati_eventi["Evento"].append(evento)
-            dati_eventi["Fatti primo tempo"].append(fatti_1t)
-            dati_eventi["Subiti primo tempo"].append(subiti_1t)
-            dati_eventi["Fatti secondo tempo"].append(fatti_2t)
-            dati_eventi["Subiti secondo tempo"].append(subiti_2t)
-            dati_eventi["Fatti totali"].append(fatti_1t + fatti_2t)
-            dati_eventi["Subiti totali"].append(subiti_1t + subiti_2t)
-
-        df_eventi = pd.DataFrame(dati_eventi)
-
-        # Risultato
-        gol_fatti_tot = dati_eventi["Fatti totali"][0]
-        gol_subiti_tot = dati_eventi["Subiti totali"][0]
+        gol_fatti_1t, gol_subiti_1t = conta_eventi(df_primo, 'Gol')
+        gol_fatti_2t, gol_subiti_2t = conta_eventi(df_secondo, 'Gol')
+        gol_fatti_tot = gol_fatti_1t + gol_fatti_2t
+        gol_subiti_tot = gol_subiti_1t + gol_subiti_2t
         st.markdown(f"## Risultato: **FMP {gol_fatti_tot} – {gol_subiti_tot} {partita_info['avversario'].title()}**")
 
-        # Durate dei tempi
         idx_inizio = 0
-        idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
+        idx_fine_primo = df[df['evento'].str.lower() == 'fine primo tempo'].index[0]
         idx_inizio_secondo = idx_fine_primo + 1
-        idx_fine_partita = df[df['evento'] == 'Fine partita'].index[0]
+        idx_fine_partita = df[df['evento'].str.lower() == 'fine partita'].index[0]
         durata_primo = df.loc[idx_fine_primo, 'tempoReale_sec'] - df.loc[idx_inizio, 'tempoReale_sec']
         durata_secondo = df.loc[idx_fine_partita, 'tempoReale_sec'] - df.loc[idx_inizio_secondo, 'tempoReale_sec']
         durata_totale = durata_primo + durata_secondo
 
-        df_stats_tempi = pd.DataFrame([analizza_tiri_gol(df_primo), analizza_tiri_gol(df_secondo)], index=['Primo tempo', 'Secondo tempo'])
-
         st.subheader("Durata dei tempi")
         st.dataframe(pd.DataFrame({"Periodo": ["Primo tempo", "Secondo tempo", "Totale partita"], "Durata_minuti": [round(durata_primo/60), round(durata_secondo/60), round(durata_totale/60)]}))
 
-        st.subheader("Gol e Tiri per Tempo")
-        st.dataframe(df_stats_tempi)
-
-        st.subheader("Altri Eventi (Angoli, Laterali, Falli, etc.)")
+        st.subheader("Altri Eventi (Gol, Tiri, Falli, etc.)")
         st.dataframe(df_eventi)
