@@ -1,5 +1,5 @@
 # Escludi tutti i file CSV
 *.csv
-
+*.toml
 # Mantieni un file CSV specifico (se necessario)
 # !example.csv
