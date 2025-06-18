@@ -1,4 +1,5 @@
 streamlit
+streamlit-autorefresh
 supabase==1.0.3
 pandas
 numpy
