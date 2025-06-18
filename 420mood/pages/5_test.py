@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+
 from supabase import create_client, Client
 
 import numpy as np
 
-
+import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Rectangle
 
 class Futsal:
