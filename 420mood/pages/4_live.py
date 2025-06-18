@@ -902,13 +902,14 @@ if "posizione" in df.columns:
 
 
 # =============== GOL SEGNATI ===============
-st.subheader("⚽ Gol segnati")
-df_gol = df[(df['evento'] == 'Gol') & (df['squadra'] != 'Loro')]
+st.subheader("⚽ Gol")
+df_gol = df[(df['evento'] == 'Gol')]
 
 if df_gol.empty:
     st.info("Nessun gol segnato.")
 else:
-    st.dataframe(df_gol[['chi', 'posizione']], use_container_width=True)
+    st.dataframe(df_gol, use_container_width=True)
+
 
 # =============== GRAFICI TIRI ===============
 if "evento" in df.columns and "field_position" in df.columns and "squadra" in df.columns:
@@ -920,14 +921,4 @@ if "evento" in df.columns and "field_position" in df.columns and "squadra" in df
     fig_loro = plot_tiri_per_zona(df, squadra='Loro')  # usa la tua funzione
     st.pyplot(fig_loro)
 
-# =============== MINUTAGGI QUARTETTI E SINGOLI (solo totali) ===============
-if 'quartetto' in df.columns and 'quartetto_1' in df.columns:
-    st.subheader("⏱️ Minutaggi Quartetti")
-    df['quartetto_tot'] = df.apply(get_giocatori_in_campo, axis=1)
-    minutaggi = calcola_minutaggi(df)
-    st.dataframe(minutaggi['quartetti_tot'], use_container_width=True)
-
-if 'chi' in df.columns:
-    st.subheader("⏱️ Minutaggi Singoli")
-    st.dataframe(minutaggi['singoli_tot'], use_container_width=True)
 
