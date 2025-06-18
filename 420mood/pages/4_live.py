@@ -881,7 +881,7 @@ st_autorefresh(interval=5000, key="live_refresh")
 
 # =============== CARICAMENTO DATI LIVE ===============
 eventi = supabase.table("live").select("*").execute().data
-df = pd.DataFrame(eventi)
+df = pd.DataFrame(eventi).reset_index(drop=True)
 
 if df.empty:
     st.warning("Nessun evento live disponibile.")
@@ -896,12 +896,9 @@ if "posizione" in df.columns:
     df = df.sort_values(by="posizione")
 
     posizione_iniziale = df["posizione"].iloc[0]
-    # Calcola tempoReale usando differenza_tempi
-    df["tempoReale"] = df["posizione"].apply(lambda x: differenza_tempi(
-        t1=format_mmss(posizione_iniziale),
-        t2=format_mmss(x),
-        format='MM:SS'
-    ) if pd.notna(x) else "")
+    df["tempoReale"] = df["posizione"].apply(
+        lambda x: differenza_tempi(posizione_iniziale, x, format="MM:SS")
+    )
 
 
 
