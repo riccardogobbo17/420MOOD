@@ -896,9 +896,13 @@ if "posizione" in df.columns:
     df = df.sort_values(by="posizione")
 
     posizione_iniziale = df["posizione"].iloc[0]
+    # Calcola tempoReale usando differenza_tempi
+    df["tempoReale"] = df["posizione"].apply(lambda x: differenza_tempi(
+        t1=format_mmss(posizione_iniziale),
+        t2=format_mmss(x),
+        format='MM:SS'
+    ) if pd.notna(x) else "")
 
-    # Calcolo differenza e format MM:SS
-    df["tempoReale"] = df["posizione"].apply(lambda x: format_mmss(x - posizione_iniziale if pd.notna(x) else 0))
 
 
 # =============== GOL SEGNATI ===============
@@ -908,7 +912,17 @@ df_gol = df[(df['evento'] == 'Gol')]
 if df_gol.empty:
     st.info("Nessun gol segnato.")
 else:
-    st.dataframe(df_gol, use_container_width=True)
+    # Calcolo risultato live
+    gol_fatti = len(df_gol[df_gol['squadra'] != 'Loro'])
+    gol_subiti = len(df_gol[df_gol['squadra'] == 'Loro'])
+    risultato = f"{gol_fatti} - {gol_subiti}"
+
+    # Mostra risultato
+    st.markdown(f"### 🟢 Risultato Live: **Noi {risultato} Loro**")
+
+    # Mostra tabella gol
+    st.dataframe(df_gol[['chi', 'squadra', 'posizione', 'tempoReale']], use_container_width=True)
+
 
 
 # =============== GRAFICI TIRI ===============
