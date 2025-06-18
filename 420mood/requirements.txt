@@ -2,3 +2,4 @@ streamlit
 supabase==1.0.3
 pandas
 numpy
+matplotlib
