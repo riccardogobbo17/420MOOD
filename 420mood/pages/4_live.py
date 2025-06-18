@@ -895,11 +895,6 @@ if "posizione" in df.columns:
     df["posizione"] = pd.to_numeric(df["posizione"], errors="coerce")
     df = df.sort_values(by="posizione")
 
-    posizione_iniziale = df["posizione"].iloc[0]
-    df["tempoReale"] = df["posizione"].apply(
-        lambda x: differenza_tempi(posizione_iniziale, x, format="MM:SS")
-    )
-
 
 
 # =============== GOL SEGNATI ===============
@@ -918,7 +913,7 @@ else:
     st.markdown(f"### 🟢 Risultato Live: **Noi {risultato} Loro**")
 
     # Mostra tabella gol
-    st.dataframe(df_gol[['chi', 'squadra', 'posizione', 'tempoReale']], use_container_width=True)
+    st.dataframe(df_gol[['chi', 'squadra', 'posizione']], use_container_width=True)
 
 
 
