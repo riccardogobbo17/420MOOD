@@ -18,7 +18,8 @@ def to_seconds(time_str):
     if len(t) == 3:
         h, m, s = t
         return int(h)*3600 + int(m)*60 + float(s)
-    return np.nan
+    else:
+        return np.nan
 
 def format_mmss(s):
     if pd.isna(s):
@@ -54,13 +55,13 @@ def calcola_tempo_effettivo(df):
     df_eff['tempo_effettivo'] = df_eff['tempo_effettivo_sec'].apply(format_mmss)
     return df_eff
 
-def get_giocatori_in_campo(row):
+def get_quartetto(row):
     giocatori = []
     for col in ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3', 'quartetto_4']:
         if pd.notna(row.get(col)):
             giocatori.append(row[col])
     giocatori = [g for g in giocatori if pd.notna(g) and str(g).strip() != '']
-    return tuple(sorted(giocatori)) if giocatori else ()
+    return tuple(sorted(set(giocatori)))
 
 def filtra_per_tempo(df, tempo='primo'):
     idx_fine_primo = df[df['evento'].str.lower() == 'fine primo tempo'].index[0]
@@ -95,7 +96,10 @@ def riepilogo_eventi_divisi(df_primo, df_secondo, eventi_da_contare):
         dati_eventi["Subiti totali"].append(subiti_1t + subiti_2t)
     return pd.DataFrame(dati_eventi)
 
-def tabella_minuti_percentuali(df_sub, quartetti=True, coppie=False, singoli=False, durata_rif=None):
+from collections import defaultdict
+from itertools import combinations
+
+def tabella_minuti_percentuali(df_sub, tipo='quartetto', durata_rif=None):
     if 'delta_reale' not in df_sub.columns:
         raise ValueError("La colonna 'delta_reale' è necessaria. Calcolala prima di usare questa funzione.")
     if durata_rif is None:
@@ -107,26 +111,38 @@ def tabella_minuti_percentuali(df_sub, quartetti=True, coppie=False, singoli=Fal
     for idx, row in df_sub.iterrows():
         giocatori = list(row['quartetto'])
         delta = row['delta_reale']
-        if quartetti and len(giocatori) >= 4:
-            key = tuple(sorted(giocatori))
+        if tipo == 'quartetto' and len(giocatori) >= 4:
+            key = tuple(sorted(set(giocatori)))
             acc[key] += delta
-        if coppie:
-            for c in combinations(sorted(giocatori), 2):
+        if tipo == 'coppia':
+            for c in combinations(sorted(set(giocatori)), 2):
                 acc[c] += delta
-        if singoli:
-            for g in giocatori:
+        if tipo == 'singolo':
+            for g in set(giocatori):
                 acc[g] += delta
 
-    if quartetti:
+    if tipo == 'quartetto':
         df_out = pd.DataFrame([{ "Quartetto": k, "Minuti giocati": v / 60, "Percentuale": 100 * v / durata_rif } for k, v in acc.items()])
-    elif coppie:
+        col_sort = "Minuti giocati"
+    elif tipo == 'coppia':
         df_out = pd.DataFrame([{ "Coppia": k, "Minuti giocati": v / 60, "Percentuale": 100 * v / durata_rif } for k, v in acc.items()])
-    elif singoli:
+        col_sort = "Minuti giocati"
+    elif tipo == 'singolo':
         df_out = pd.DataFrame([{ "Giocatore": k, "Minuti giocati": v / 60, "Percentuale": 100 * v / durata_rif } for k, v in acc.items()])
+        col_sort = "Minuti giocati"
     else:
         df_out = pd.DataFrame()
+        col_sort = None
 
-    return df_out.sort_values(by="Minuti giocati", ascending=False)
+
+    # Aggiungi colonna MM:SS
+    if "Minuti giocati" in df_out.columns:
+        df_out["Tempo MM:SS"] = df_out["Minuti giocati"].apply(format_mmss)
+
+    if col_sort:
+        return df_out.sort_values(by=col_sort, ascending=False).reset_index(drop=True)
+    return df_out
+
 
 # === INTERFACCIA ===
 st.title("Tutte le partite disponibili")
@@ -163,9 +179,19 @@ if "partita_scelta" in st.session_state:
         df = calcola_tempo_effettivo(df)
         df['delta_reale'] = df['tempoReale_sec'].shift(-1) - df['tempoReale_sec']
         df['delta_reale'] = df['delta_reale'].fillna(0)
+        df['quartetto'] = df.apply(get_quartetto, axis=1)
 
-        df_primo = filtra_per_tempo(df, 'primo')
-        df_secondo = filtra_per_tempo(df, 'secondo')
+        # Indici temporali
+        idx_inizio = 0
+        idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
+        idx_inizio_secondo = idx_fine_primo + 1
+        idx_fine_partita = df[df['evento'] == 'Fine partita'].index[0]
+        durata_primo = df.loc[idx_fine_primo, 'tempoReale_sec'] - df.loc[idx_inizio, 'tempoReale_sec']
+        durata_secondo = df.loc[idx_fine_partita, 'tempoReale_sec'] - df.loc[idx_inizio_secondo, 'tempoReale_sec']
+        durata_totale = durata_primo + durata_secondo
+
+        df_primo = df.loc[df.index <= idx_fine_primo].copy()
+        df_secondo = df.loc[df.index >= idx_inizio_secondo].copy()
 
         eventi_da_contare = ['Gol', 'Tiri', 'Parate', 'Angolo', 'Laterale', 'Fallo', 'Ammonizione', 'Espulsione', 'Timeout', '3v2', '2v1']
         df_eventi = riepilogo_eventi_divisi(df_primo, df_secondo, eventi_da_contare)
@@ -176,26 +202,32 @@ if "partita_scelta" in st.session_state:
         gol_subiti_tot = gol_subiti_1t + gol_subiti_2t
         st.markdown(f"## Risultato: **FMP {gol_fatti_tot} – {gol_subiti_tot} {partita_info['avversario'].title()}**")
 
-        idx_inizio = 0
-        idx_fine_primo = df[df['evento'].str.lower() == 'fine primo tempo'].index[0]
-        idx_inizio_secondo = idx_fine_primo + 1
-        idx_fine_partita = df[df['evento'].str.lower() == 'fine partita'].index[0]
-        durata_primo = df.loc[idx_fine_primo, 'tempoReale_sec'] - df.loc[idx_inizio, 'tempoReale_sec']
-        durata_secondo = df.loc[idx_fine_partita, 'tempoReale_sec'] - df.loc[idx_inizio_secondo, 'tempoReale_sec']
-        durata_totale = durata_primo + durata_secondo
-
         st.subheader("Durata dei tempi")
         st.dataframe(pd.DataFrame({"Periodo": ["Primo tempo", "Secondo tempo", "Totale partita"], "Durata_minuti": [round(durata_primo/60), round(durata_secondo/60), round(durata_totale/60)]}))
 
         st.subheader("Eventi per tempo")
         st.dataframe(df_eventi)
 
-        df['quartetto'] = df.apply(get_giocatori_in_campo, axis=1)
+        # --- CALCOLA E MOSTRA TABELLE MINUTI/%
+
+        # Calcola tutte le tabelle
+        df_quartetti_tot = tabella_minuti_percentuali(df, tipo='quartetto', durata_rif=durata_totale)
+        df_quartetti_1t = tabella_minuti_percentuali(df_primo, tipo='quartetto', durata_rif=durata_primo)
+        df_quartetti_2t = tabella_minuti_percentuali(df_secondo, tipo='quartetto', durata_rif=durata_secondo)
+
+        df_coppie_tot = tabella_minuti_percentuali(df, tipo='coppia', durata_rif=durata_totale)
+        df_coppie_1t = tabella_minuti_percentuali(df_primo, tipo='coppia', durata_rif=durata_primo)
+        df_coppie_2t = tabella_minuti_percentuali(df_secondo, tipo='coppia', durata_rif=durata_secondo)
+
+        df_singoli_tot = tabella_minuti_percentuali(df, tipo='singolo', durata_rif=durata_totale)
+        df_singoli_1t = tabella_minuti_percentuali(df_primo, tipo='singolo', durata_rif=durata_primo)
+        df_singoli_2t = tabella_minuti_percentuali(df_secondo, tipo='singolo', durata_rif=durata_secondo)
+
 
         st.subheader("Minuti giocati per quartetto")
-        df_quartetti_tot = tabella_minuti_percentuali(df, durata_rif=durata_totale, quartetti=True, singoli=False)
-        df_quartetti_1t = tabella_minuti_percentuali(df_primo, durata_rif=durata_primo, quartetti=True, singoli=False)
-        df_quartetti_2t = tabella_minuti_percentuali(df_secondo, durata_rif=durata_secondo, quartetti=True, singoli=False)
+        # df_quartetti_tot = tabella_minuti_percentuali(df, tipo='quartetto', durata_rif=durata_totale)
+        # df_quartetti_1t = tabella_minuti_percentuali(df_primo, tipo='quartetto', durata_rif=durata_primo)
+        # df_quartetti_2t = tabella_minuti_percentuali(df_secondo, tipo='quartetto', durata_rif=durata_secondo)
 
         with st.expander("Totale partita - Quartetti"):
             st.dataframe(df_quartetti_tot)
@@ -204,10 +236,22 @@ if "partita_scelta" in st.session_state:
         with st.expander("Secondo tempo - Quartetti"):
             st.dataframe(df_quartetti_2t)
 
+        st.subheader("Minuti giocati per coppia")
+        # df_coppie_tot = tabella_minuti_percentuali(df, tipo='coppia', durata_rif=durata_totale)
+        # df_coppie_1t = tabella_minuti_percentuali(df_primo, tipo='coppia', durata_rif=durata_primo)
+        # df_coppie_2t = tabella_minuti_percentuali(df_secondo, tipo='coppia', durata_rif=durata_secondo)
+
+        with st.expander("Totale partita - Coppie"):
+            st.dataframe(df_coppie_tot)
+        with st.expander("Primo tempo - Coppie"):
+            st.dataframe(df_coppie_1t)
+        with st.expander("Secondo tempo - Coppie"):
+            st.dataframe(df_coppie_2t)
+
         st.subheader("Minuti giocati per giocatore")
-        df_singoli_tot = tabella_minuti_percentuali(df, durata_rif=durata_totale, quartetti=False, singoli=True)
-        df_singoli_1t = tabella_minuti_percentuali(df_primo, durata_rif=durata_primo, quartetti=False, singoli=True)
-        df_singoli_2t = tabella_minuti_percentuali(df_secondo, durata_rif=durata_secondo, quartetti=False, singoli=True)
+        # df_singoli_tot = tabella_minuti_percentuali(df, tipo='singolo', durata_rif=durata_totale)
+        # df_singoli_1t = tabella_minuti_percentuali(df_primo, tipo='singolo', durata_rif=durata_primo)
+        # df_singoli_2t = tabella_minuti_percentuali(df_secondo, tipo='singolo', durata_rif=durata_secondo)
 
         with st.expander("Totale partita - Singoli"):
             st.dataframe(df_singoli_tot)
@@ -215,3 +259,4 @@ if "partita_scelta" in st.session_state:
             st.dataframe(df_singoli_1t)
         with st.expander("Secondo tempo - Singoli"):
             st.dataframe(df_singoli_2t)
+
