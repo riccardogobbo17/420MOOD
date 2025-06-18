@@ -1,10 +1,7 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client
+from supabase import create_client, Client
 from streamlit_autorefresh import st_autorefresh
-
-
-
 import matplotlib.pyplot as plt
 from matplotlib.patches import Arc, Circle, Rectangle
 
