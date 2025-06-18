@@ -913,12 +913,17 @@ else:
 
 # =============== GRAFICI TIRI ===============
 if "evento" in df.columns and "field_position" in df.columns and "squadra" in df.columns:
-    st.subheader("Tiri per Zona - Noi")
-    fig_noi = plot_tiri_per_zona(df, squadra='Noi')  # usa la tua funzione
-    st.pyplot(fig_noi)
+    col1, col2 = st.columns(2)
 
-    st.subheader("Tiri Subiti per Zona - Loro")
-    fig_loro = plot_tiri_per_zona(df, squadra='Loro')  # usa la tua funzione
-    st.pyplot(fig_loro)
+    with col1:
+        st.subheader("Tiri per Zona - Noi")
+        fig_noi = plot_tiri_per_zona(df, squadra='Noi')
+        st.pyplot(fig_noi, use_container_width=True)
+
+    with col2:
+        st.subheader("Tiri Subiti per Zona - Loro")
+        fig_loro = plot_tiri_per_zona(df, squadra='Loro')
+        st.pyplot(fig_loro, use_container_width=True)
+
 
 
