@@ -6,8 +6,10 @@ from futsal_analysis.config_supabase import get_supabase_client
 # === CONFIG ===
 supabase = get_supabase_client()
 
+# === UTILS ===
 def to_id_partita(data, avversario):
     return f"{data}_{avversario}".replace(" ", "_").replace("/", "-")
+
 
 def parse_data_sicura(data_str):
     try:
@@ -18,8 +20,62 @@ def parse_data_sicura(data_str):
         except:
             return pd.NaT
 
-st.set_page_config(page_title="Admin - Futsal", layout="wide")
+
+def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
+    df = df.rename(columns={
+        "Position": "posizione",
+        "Data": "data",
+        "Evento": "evento",
+        "Portiere": "portiere",
+        "Quartetto": "quartetto",
+        "Chi": "chi",
+        "Esito": "esito",
+        "Field Position": "field_position",
+        "Piede": "piede",
+        "Squadra": "squadra"
+    })
+
+    df["partita_id"] = partita_id
+
+    # Split quartetto
+    if "quartetto" in df.columns:
+        split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
+        for i in range(4):
+            col_name = f"quartetto_{i+1}"
+            if i < split_cols.shape[1]:
+                df[col_name] = split_cols[i].str.strip()
+            else:
+                df[col_name] = ""
+
+    # Conversione data → YYYY-MM-DD
+    if "data" in df.columns:
+        df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce").dt.strftime("%Y-%m-%d")
+
+    # 🔑 Qui NON converto più Position a numerico: la tengo come stringa
+    if "posizione" in df.columns:
+        df["posizione"] = df["posizione"].fillna("").astype(str).str.strip()
+
+    colonne_finali = [
+        "posizione", "data", "evento", "portiere", "quartetto",
+        "quartetto_1", "quartetto_2", "quartetto_3", "quartetto_4",
+        "chi", "esito", "field_position", "piede", "squadra", "partita_id"
+    ]
+    for col in colonne_finali:
+        if col not in df.columns:
+            df[col] = ""
+
+    df = df[colonne_finali]
+    df = df.fillna("")
+
+    return df
+
+
+
+# === STREAMLIT APP ===
+st.set_page_config(page_title="Admin", layout="wide")
 st.title("Pannello Admin")
+
+# Password di accesso
 admin_password = "admin"
 password = st.text_input("Password", type="password")
 if password != admin_password:
@@ -50,6 +106,7 @@ with st.form("nuova_partita"):
 
 # --- SEZIONE 2: Upload CSV eventi ---
 st.header("📂 Carica eventi da CSV")
+
 partite = supabase.table("partite").select("id, avversario, data").order("data", desc=True).execute().data
 if not partite:
     st.warning("Nessuna partita trovata, crea prima una nuova partita.")
@@ -60,34 +117,14 @@ file = st.file_uploader("Carica CSV eventi", type=["csv"])
 
 if file and partita_scelta:
     partita_id = partita_scelta.split("(")[-1].strip(")")
-    df = pd.read_csv(file)
+    df_raw = pd.read_csv(file)
 
-    # Preprocessing (come nel tuo script)
-    df = df.rename(columns={
-        "Quartetto.1": "quartetto_1",
-        "Quartetto.2": "quartetto_2",
-        "Quartetto.3": "quartetto_3",
-        "Quartetto.4": "quartetto_4"
-    })
-
-    df["partita_id"] = partita_id
-
-    colonne_valide = [
-        "Posizione", "Data", "Evento", "Portiere", "Quartetto",
-        "quartetto_1", "quartetto_2", "quartetto_3", "quartetto_4",
-        "Chi", "Esito", "Field Position", "Piede", "Squadra", "partita_id"
-    ]
-    for col in colonne_valide:
-        if col not in df.columns:
-            df[col] = None
-
-    df = df[colonne_valide]
-    df.columns = [c.lower().replace(" ", "_") for c in df.columns]
-
-    df["data"] = pd.to_datetime(df["data"], format="%d/%m/%Y", errors="coerce").dt.strftime("%Y-%m-%d")
-    df = df.fillna("")
-
+    # ✅ Preprocessing
+    df = preprocess_eventi(df_raw, partita_id)
     eventi_data = df.to_dict(orient="records")
+
+    st.write("Anteprima dati preprocessati:")
+    st.dataframe(df.head(20))
 
     if st.button("Carica eventi nel DB"):
         batch_size = 500

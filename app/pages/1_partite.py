@@ -87,62 +87,124 @@ with tabs[1]:
     st.dataframe(pd.DataFrame(report_eventi['portieri_individuali']).T)
 
 # === TAB 3: Zone ===
+
 with tabs[2]:
     st.header("Analisi zonale")
     campo = FutsalPitch()
     report_zona = calcola_report_zona(df)
 
-    team_keys = list(report_zona['squadra'].keys())
-    team_key_sel = st.selectbox("Categoria squadra", team_keys, format_func=lambda x: x.replace("_", " ").capitalize(), key="zona_squadra")
+    # --- GRAFICI DI SQUADRA (Attacco & Difesa) ---
+    st.subheader("Statistiche di squadra per zona")
+    col1, col2 = st.columns(2)
 
-    zone_example = report_zona['squadra'][team_key_sel]
-    if isinstance(zone_example, dict) and len(zone_example) > 0:
-        first_zone = next(iter(zone_example.values()))
-        metric_keys = list(first_zone.keys())
-    else:
-        metric_keys = []
-    stat_keys_sel = st.multiselect(
-        "Statistiche da visualizzare (squadra)", metric_keys, default=metric_keys[:3], key="zona_stats_squadra"
-    )
+    with col1:
+        st.markdown("#### Attacco")
+        zone_attacco = report_zona['squadra']['attacco']
+        if zone_attacco:
+            first_zone = next(iter(zone_attacco.values()))
+            metriche_attacco = list(first_zone.keys())
+            stat_keys_att_sel = st.multiselect(
+                "Statistiche attacco (squadra)",
+                metriche_attacco,
+                default=metriche_attacco[:3],
+                key="zona_stats_attacco_squadra"
+            )
+            if stat_keys_att_sel:
+                fig, ax = draw_team_metric_per_zone(
+                    report_zona, campo, stat_keys_att_sel,
+                    team_key="attacco",
+                    title="Attacco per zona (squadra)",
+                    cmap=cm.Reds
+                )
+                st.pyplot(fig)
+        else:
+            st.info("Nessun dato di attacco disponibile.")
 
-    st.subheader(f"Distribuzione per zona – squadra ({team_key_sel})")
-    if stat_keys_sel:
-        fig, ax = draw_team_metric_per_zone(
-            report_zona, campo, stat_keys_sel, team_key=team_key_sel,
-            title=f"{', '.join(stat_keys_sel)} per zona ({team_key_sel})", cmap=cm.Reds
-        )
-        st.pyplot(fig)
-    else:
-        st.info("Seleziona almeno una statistica.")
+    with col2:
+        st.markdown("#### Difesa")
+        zone_difesa = report_zona['squadra']['difesa']
+        if zone_difesa:
+            first_zone = next(iter(zone_difesa.values()))
+            metriche_difesa = list(first_zone.keys())
+            stat_keys_dif_sel = st.multiselect(
+                "Statistiche difesa (squadra)",
+                metriche_difesa,
+                default=metriche_difesa[:3],
+                key="zona_stats_difesa_squadra"
+            )
+            if stat_keys_dif_sel:
+                fig, ax = draw_team_metric_per_zone(
+                    report_zona, campo, stat_keys_dif_sel,
+                    team_key="difesa",
+                    title="Difesa per zona (squadra)",
+                    cmap=cm.Blues
+                )
+                st.pyplot(fig)
+        else:
+            st.info("Nessun dato di difesa disponibile.")
 
     st.markdown("---")
-    st.header("Report zonale – giocatore")
+
+    # --- GRAFICI INDIVIDUALI (Attacco & Difesa) ---
+    st.subheader("Statistiche individuali per zona")
     giocatori = sorted({
         g for zona in report_zona['individuali'].values()
         for g in zona.keys() if g.strip()
     })
     giocatore_scelto = st.selectbox("Scegli giocatore", giocatori, key="zona_giocatore")
 
-    for z, zona in report_zona['individuali'].items():
-        if giocatore_scelto in zona:
-            metriche_giocatore = list(zona[giocatore_scelto].keys())
-            break
-    else:
-        metriche_giocatore = []
+    col1, col2 = st.columns(2)
 
-    stat_keys_giocatore_sel = st.multiselect(
-        "Statistiche da visualizzare (giocatore)", metriche_giocatore, default=metriche_giocatore[:3], key="zona_stats_giocatore"
-    )
+    with col1:
+        st.markdown(f"#### Attacco – {giocatore_scelto}")
+        # Trovo metriche attacco per quel giocatore
+        metriche_attacco_gioc = []
+        for zona in report_zona['individuali'].values():
+            if giocatore_scelto in zona:
+                metriche_attacco_gioc = [k for k in zona[giocatore_scelto].keys() if "tiro" in k or "palla_persa" in k]
+                break
 
-    st.subheader(f"Distribuzione per zona – {giocatore_scelto.capitalize()}")
-    if stat_keys_giocatore_sel:
-        fig, ax = draw_player_metric_per_zone(
-            report_zona['individuali'], campo, stat_keys_giocatore_sel, chi=giocatore_scelto,
-            title=f"{', '.join(stat_keys_giocatore_sel)} per zona ({giocatore_scelto})", cmap=cm.Blues
+        stat_keys_att_gioc_sel = st.multiselect(
+            "Statistiche attacco (giocatore)",
+            metriche_attacco_gioc,
+            default=metriche_attacco_gioc[:3],
+            key="zona_stats_attacco_gioc"
         )
-        st.pyplot(fig)
-    else:
-        st.info("Seleziona almeno una statistica.")
+
+        if stat_keys_att_gioc_sel:
+            fig, ax = draw_player_metric_per_zone(
+                report_zona['individuali'], campo, stat_keys_att_gioc_sel,
+                chi=giocatore_scelto,
+                title=f"Attacco per zona – {giocatore_scelto}",
+                cmap=cm.OrRd
+            )
+            st.pyplot(fig)
+
+    with col2:
+        st.markdown(f"#### Difesa – {giocatore_scelto}")
+        # Trovo metriche difesa per quel giocatore
+        metriche_difesa_gioc = []
+        for zona in report_zona['individuali'].values():
+            if giocatore_scelto in zona:
+                metriche_difesa_gioc = [k for k in zona[giocatore_scelto].keys() if "recuperata" in k or "falli" in k or "ribattuti" in k]
+                break
+
+        stat_keys_dif_gioc_sel = st.multiselect(
+            "Statistiche difesa (giocatore)",
+            metriche_difesa_gioc,
+            default=metriche_difesa_gioc[:3],
+            key="zona_stats_difesa_gioc"
+        )
+
+        if stat_keys_dif_gioc_sel:
+            fig, ax = draw_player_metric_per_zone(
+                report_zona['individuali'], campo, stat_keys_dif_gioc_sel,
+                chi=giocatore_scelto,
+                title=f"Difesa per zona – {giocatore_scelto}",
+                cmap=cm.BuPu
+            )
+            st.pyplot(fig)
+
 
 # === TAB 4: Minutaggi ===
 with tabs[3]:
