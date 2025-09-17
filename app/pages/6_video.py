@@ -1,8 +1,8 @@
 import streamlit as st
 from futsal_analysis.config_supabase import get_supabase_client
 
-st.set_page_config(page_title="Video Partite", layout="wide")
-st.title("🎥 Tutte le partite disponibili")
+st.set_page_config(page_title="Video Partite", layout="wide", page_icon="🎥")
+st.header("Tutte le partite disponibili")
 
 # --- Connessione Supabase ---
 supabase = get_supabase_client()

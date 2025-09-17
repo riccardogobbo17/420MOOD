@@ -89,8 +89,8 @@ def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
 
 
 # === STREAMLIT APP ===
-st.set_page_config(page_title="Admin", layout="wide")
-st.title("Pannello Admin")
+st.set_page_config(page_title="Admin", layout="wide", page_icon="🔧")
+st.header("Pannello Admin")
 
 # Password di accesso
 admin_password = "admin"
@@ -99,7 +99,7 @@ if password != admin_password:
     st.stop()
 
 # --- SEZIONE 1: Inserisci nuova partita ---
-st.header("➕ Inserisci nuova partita")
+st.markdown("#### ➕ Inserisci nuova partita")
 with st.form("nuova_partita"):
     data = st.date_input("Data partita")
     avversario = st.text_input("Avversario")

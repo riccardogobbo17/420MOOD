@@ -1,7 +1,6 @@
 import streamlit as st
-
-st.title("420Mood")
+st.set_page_config(page_title="Home", page_icon="🏠", layout="centered")
 st.markdown("""
-Benvenuto in 420Mood!  
-Usa il menu a sinistra per navigare nelle varie sezioni.
+⬅️ MENU 
 """)
+st.image("../app/imgs/logoFMP.png", caption="", use_container_width=True)

@@ -11,8 +11,8 @@ from futsal_analysis.utils_minutaggi import *
 from futsal_analysis.pitch_drawer import FutsalPitch
 from futsal_analysis.zone_analysis import *
 
-st.set_page_config(page_title="Analisi Futsal", layout="wide")
-st.title("Tutte le partite disponibili")
+st.set_page_config(page_title="Analisi Partite", layout="wide", page_icon="⚽")
+st.header("Tutte le partite disponibili")
 
 supabase = get_supabase_client()
 res = supabase.table("partite").select("*").order("data", desc=True).execute()
@@ -28,7 +28,7 @@ for i in range(0, len(partite), n_cols):
     cols = st.columns(n_cols)
     for j, partita in enumerate(partite[i:i+n_cols]):
         with cols[j]:
-            st.markdown(f"### {partita['avversario'].title()}")
+            st.markdown(f"#### {partita['avversario'].title()}")
             st.write(f"{partita['competizione'].capitalize()} — {partita['data']}")
             if st.button("Analizza", key=f"btn_{i}_{j}"):
                 st.session_state["partita_scelta"] = partita["id"]

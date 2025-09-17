@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # Percorso relativo invece che assoluto (così funziona anche su Streamlit Cloud)
-GIOCATORI_FILE = "/Users/riccardogobbo17/Documents/420MOOD/app/giocatori.csv"
-
-st.title("Gestione Giocatori")
+GIOCATORI_FILE = "./giocatori.csv"
+st.set_page_config(page_title="Giocatori", page_icon="🌹", layout="wide")
+st.header("Giocatori")
 
 try:
     giocatori = pd.read_csv(GIOCATORI_FILE)
