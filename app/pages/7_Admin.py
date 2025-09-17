@@ -23,6 +23,7 @@ def parse_data_sicura(data_str):
 
 def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
     df = df.rename(columns={
+        "Posizione": "posizione",
         "Position": "posizione",
         "Data": "data",
         "Evento": "evento",
@@ -37,15 +38,31 @@ def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
 
     df["partita_id"] = partita_id
 
-    # Split quartetto
     if "quartetto" in df.columns:
+        # splitto in massimo 5 colonne (0–4)
         split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
-        for i in range(4):
-            col_name = f"quartetto_{i+1}"
-            if i < split_cols.shape[1]:
-                df[col_name] = split_cols[i].str.strip()
-            else:
-                df[col_name] = ""
+
+        # sostituisco la colonna originale col primo giocatore
+        df["quartetto"] = split_cols[0].str.strip()
+
+    # creo le altre colonne (dal 2° giocatore in poi)
+    for i in range(1, 5):  # dal secondo fino al quinto
+        col_name = f"quartetto_{i}"
+        if i < split_cols.shape[1]:
+            df[col_name] = split_cols[i].str.strip()
+        else:
+            df[col_name] = None  # oppure "" se vuoi stringa vuota
+
+
+    # # Split quartetto
+    # if "quartetto" in df.columns:
+    #     split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
+    #     for i in range(4):
+    #         col_name = f"quartetto_{i+1}"
+    #         if i < split_cols.shape[1]:
+    #             df[col_name] = split_cols[i].str.strip()
+    #         else:
+    #             df[col_name] = ""
 
     # Conversione data → YYYY-MM-DD
     if "data" in df.columns:
