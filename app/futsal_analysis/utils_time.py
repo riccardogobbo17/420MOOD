@@ -16,10 +16,29 @@ def calcola_durate(df):
     idx_sp = idx_fp + 1
     idx_end = df[df['evento'] == 'Fine partita'].index[0]
 
-    durata_primo = differenza_tempi(df.loc[0, 'tempoReale'], df.loc[idx_fp, 'tempoReale'], format='MM:SS')
-    durata_secondo = differenza_tempi(df.loc[idx_sp, 'tempoReale'], df.loc[idx_end, 'tempoReale'], format='MM:SS')
+    # Funzione helper per pulire i valori di tempo
+    def clean_time_value(time_val):
+        if pd.isna(time_val) or time_val == '' or time_val is None:
+            return "00:00"
+        time_str = str(time_val).strip()
+        if not time_str or ':' not in time_str:
+            return "00:00"
+        return time_str
 
-    durata_totale = format_mmss(pd.to_timedelta("00:" + durata_primo).total_seconds() + pd.to_timedelta("00:" + durata_secondo).total_seconds())
+    # Pulisci i valori di tempo prima di usarli
+    tempo_start = clean_time_value(df.loc[0, 'tempoReale'])
+    tempo_fine_primo = clean_time_value(df.loc[idx_fp, 'tempoReale'])
+    tempo_start_secondo = clean_time_value(df.loc[idx_sp, 'tempoReale'])
+    tempo_fine_partita = clean_time_value(df.loc[idx_end, 'tempoReale'])
+
+    durata_primo = differenza_tempi(tempo_start, tempo_fine_primo, format='MM:SS')
+    durata_secondo = differenza_tempi(tempo_start_secondo, tempo_fine_partita, format='MM:SS')
+
+    try:
+        durata_totale = format_mmss(pd.to_timedelta("00:" + durata_primo).total_seconds() + pd.to_timedelta("00:" + durata_secondo).total_seconds())
+    except (ValueError, TypeError):
+        durata_totale = "00:00"
+    
     dati_durate = pd.DataFrame({
         "Periodo": ["1T", "2T", "Totale"],
         "Durata_minuti": [durata_primo, durata_secondo, durata_totale],
@@ -50,12 +69,19 @@ def calcola_tempo_effettivo(df):
     for i, row in df.iterrows():
         t = row['Posizione_sec']
         if i <= idx_fine_primo:
+            # Primo tempo: da 0 a 20 minuti
             perc = (t - t_start) / (t_fine_primo - t_start)
+            # Limita la percentuale tra 0 e 1 per evitare tempi impossibili
+            perc = max(0, min(1, perc))
             eff = perc * 20 * 60
         elif i >= idx_start_secondo:
+            # Secondo tempo: da 20 a 40 minuti
             perc = (t - t_start_secondo) / (t_fine_partita - t_start_secondo)
+            # Limita la percentuale tra 0 e 1 per evitare tempi impossibili
+            perc = max(0, min(1, perc))
             eff = 20 * 60 + perc * 20 * 60
         else:
+            # Intervallo
             eff = np.nan
         tempo_effettivo.append(eff)
 

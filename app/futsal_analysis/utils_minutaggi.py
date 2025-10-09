@@ -22,9 +22,32 @@ def calcola_minutaggi(df, df_1t, df_2t):
     """
     # ---------- helper ------------
     def durata_reale_sec(df_local):
+        # Funzione helper per pulire i valori di tempo
+        def clean_time_value(time_val):
+            if pd.isna(time_val) or time_val == '' or time_val is None:
+                return "00:00"
+            # Rimuovi spazi e caratteri non validi
+            time_str = str(time_val).strip()
+            # Se è una stringa vuota dopo lo strip, usa 00:00
+            if not time_str:
+                return "00:00"
+            # Se non contiene ':', aggiungi 00: all'inizio
+            if ':' not in time_str:
+                return "00:00"
+            return time_str
+        
+        # Pulisci i valori di tempo
+        tempo_reale_clean = df_local['tempoReale'].apply(clean_time_value)
+        tempo_reale_next_clean = tempo_reale_clean.shift(-1).fillna("00:00")
+        
+        # Assicurati che tutti i valori abbiano il formato corretto per timedelta
+        tempo_reale_clean = tempo_reale_clean.fillna("00:00")
+        tempo_reale_next_clean = tempo_reale_next_clean.fillna("00:00")
+        
+        # Converti in timedelta
         delta = (
-            pd.to_timedelta("00:" + df_local['tempoReale'].shift(-1).fillna("00:00")).dt.total_seconds()
-            - pd.to_timedelta("00:" + df_local['tempoReale'].fillna("00:00")).dt.total_seconds()
+            pd.to_timedelta("00:" + tempo_reale_next_clean).dt.total_seconds()
+            - pd.to_timedelta("00:" + tempo_reale_clean).dt.total_seconds()
         ).values
         return np.clip(delta, a_min=0, a_max=None).sum()
 
@@ -46,8 +69,25 @@ def calcola_minutaggi(df, df_1t, df_2t):
             t1, t2 = df_local.loc[i, 'tempoReale'], df_local.loc[i + 1, 'tempoReale']
             if pd.isna(t1) or pd.isna(t2):
                 continue
-            delta = (pd.to_timedelta("00:" + t2) - pd.to_timedelta("00:" + t1)).total_seconds()
-            if delta <= 0:
+            
+            # Pulisci i valori di tempo prima di convertirli
+            def clean_time_for_timedelta(time_val):
+                if pd.isna(time_val) or time_val == '' or time_val is None:
+                    return "00:00"
+                time_str = str(time_val).strip()
+                if not time_str or ':' not in time_str:
+                    return "00:00"
+                return time_str
+            
+            t1_clean = clean_time_for_timedelta(t1)
+            t2_clean = clean_time_for_timedelta(t2)
+            
+            try:
+                delta = (pd.to_timedelta("00:" + t2_clean) - pd.to_timedelta("00:" + t1_clean)).total_seconds()
+                if delta <= 0:
+                    continue
+            except (ValueError, TypeError):
+                # Se c'è ancora un errore nel parsing, salta questo elemento
                 continue
 
             movimento, portiere = estrai_mov_portiere(df_local.loc[i + 1])

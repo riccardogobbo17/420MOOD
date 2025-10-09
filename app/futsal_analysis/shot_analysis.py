@@ -2,7 +2,7 @@ import pandas as pd
 
 def calcola_statistiche_tiri(df):
     df_tiri = df[(df['squadra'] == 'Noi') & (df['evento'] == 'Tiro')].copy()
-    df_tiri['zona'] = pd.to_numeric(df_tiri['field_position'], errors='coerce').fillna(-1).astype(int)
+    df_tiri['zona'] = pd.to_numeric(df_tiri['dove'], errors='coerce').fillna(-1).astype(int)
 
     zone_stats = {}
     for zona, gruppo in df_tiri.groupby('zona'):

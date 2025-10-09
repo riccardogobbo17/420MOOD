@@ -2,11 +2,24 @@ import streamlit as st
 from futsal_analysis.config_supabase import get_supabase_client
 
 st.set_page_config(page_title="Video Partite", layout="wide", page_icon="🎥")
-st.header("Tutte le partite disponibili")
 
-# --- Connessione Supabase ---
+# --- VERIFICA CATEGORIA SELEZIONATA ---
 supabase = get_supabase_client()
-res = supabase.table("partite").select("*").order("data", desc=True).execute()
+
+# Se non c'è una categoria in session_state, imposta un default
+if 'categoria_selezionata' not in st.session_state:
+    # Carica le categorie disponibili
+    res_all = supabase.table("partite").select("categoria").execute()
+    categorie_disponibili = sorted(list(set([p.get('categoria', 'Prima Squadra') for p in res_all.data if p.get('categoria')])))
+    st.session_state['categoria_selezionata'] = categorie_disponibili[0] if categorie_disponibili else 'Prima Squadra'
+
+categoria_attiva = st.session_state['categoria_selezionata']
+
+st.header(f"Tutte le partite disponibili - {categoria_attiva}")
+st.info(f"📂 Categoria attiva: **{categoria_attiva}** (modificabile dalla Homepage)")
+
+# --- Carica partite FILTRATE PER CATEGORIA ---
+res = supabase.table("partite").select("*").eq("categoria", categoria_attiva).order("data", desc=True).execute()
 partite = res.data
 
 if not partite:

@@ -786,9 +786,32 @@ def calcola_minutaggi(df):
 
     # Calcola durate
     def durata_reale_sec(df_local):
+        # Funzione helper per pulire i valori di tempo
+        def clean_time_value(time_val):
+            if pd.isna(time_val) or time_val == '' or time_val is None:
+                return "00:00"
+            # Rimuovi spazi e caratteri non validi
+            time_str = str(time_val).strip()
+            # Se è una stringa vuota dopo lo strip, usa 00:00
+            if not time_str:
+                return "00:00"
+            # Se non contiene ':', aggiungi 00: all'inizio
+            if ':' not in time_str:
+                return "00:00"
+            return time_str
+        
+        # Pulisci i valori di tempo
+        tempo_reale_clean = df_local['tempoReale'].apply(clean_time_value)
+        tempo_reale_next_clean = tempo_reale_clean.shift(-1).fillna("00:00")
+        
+        # Assicurati che tutti i valori abbiano il formato corretto per timedelta
+        tempo_reale_clean = tempo_reale_clean.fillna("00:00")
+        tempo_reale_next_clean = tempo_reale_next_clean.fillna("00:00")
+        
+        # Converti in timedelta
         delta = (
-            pd.to_timedelta("00:" + df_local['tempoReale'].shift(-1).fillna("00:00")).dt.total_seconds()
-            - pd.to_timedelta("00:" + df_local['tempoReale'].fillna("00:00")).dt.total_seconds()
+            pd.to_timedelta("00:" + tempo_reale_next_clean).dt.total_seconds()
+            - pd.to_timedelta("00:" + tempo_reale_clean).dt.total_seconds()
         ).values
         return np.clip(delta, a_min=0, a_max=None).sum()
 
@@ -823,7 +846,7 @@ def filtra_per_tempo(df, tempo='primo'):
 def plot_tiri_per_zona(df, squadra='Noi'):
 
     df_tiri = df[(df['squadra'] == squadra) & (df['evento'] == 'Tiro')].copy()
-    df_tiri['zona'] = pd.to_numeric(df_tiri['field_position'], errors='coerce').fillna(-1).astype(int)
+    df_tiri['zona'] = pd.to_numeric(df_tiri['dove'], errors='coerce').fillna(-1).astype(int)
 
     # Conta gli esiti per zona
     zone_stats = {}
@@ -892,7 +915,7 @@ partita_scelta = st.selectbox(
 )
 
 # -- 3. Caricamento eventi della partita selezionata --
-eventi = supabase.table("eventi").select("*").eq("partita_id", partita_scelta).execute().data
+eventi = supabase.table("eventi").select("*").eq("partita_id", partita_scelta).order("posizione").execute().data
 df = pd.DataFrame(eventi)
 
 # -- 4. Calcolo tempi e colonna periodo --
@@ -939,7 +962,7 @@ st.dataframe(dati_durate, use_container_width=True)
 
 # -- 9. Gol segnati --
 st.subheader("Gol segnati")
-st.dataframe(df[df['evento'] == 'Gol'][['chi', 'tempoEffettivo', 'tempoReale', 'Periodo']], use_container_width=True)
+st.dataframe(df[df['evento'] == 'Gol'][['chi', 'tempoEffettivo', 'Periodo']], use_container_width=True)
 
 # -- 10. Minutaggi Quartetti --
 st.subheader("Minutaggi Quartetti")
