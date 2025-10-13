@@ -284,10 +284,10 @@ def aggrega_minutaggi_partite(partite_ids, df_eventi):
                             key = (cat_name, row['Giocatore'])
                         elif cat_name == "mov4_singolo_portiere":
                             key = (cat_name, row['Portiere'], row['Giocatore'])
-                        elif cat_name == "mov4_coppie":
-                            key = (cat_name, row['Giocatori'])
-                        elif cat_name == "mov4_coppia_portiere":
-                            key = (cat_name, row['Portiere'], row['Giocatori'])
+                        # elif cat_name == "mov4_coppie":  # COMMENTATO
+                        #     key = (cat_name, row['Giocatori'])
+                        # elif cat_name == "mov4_coppia_portiere":  # COMMENTATO
+                        #     key = (cat_name, row['Portiere'], row['Giocatori'])
                         elif cat_name in ["mov4_quartetto", "mov3_senza_portiere", "mov3_con_portiere", "mov5_senza_portiere"]:
                             key = (cat_name, row['Giocatori_movimento'])
                         elif cat_name == "mov4_quartetto_portiere":
@@ -343,19 +343,19 @@ def aggrega_minutaggi_partite(partite_ids, df_eventi):
                     "Minuti_giocati": mmss,
                     "Percentuale": perc
                 })
-            elif cat_name == "mov4_coppie":
-                dfs[cat_name].append({
-                    "Giocatori": key[1],
-                    "Minuti_giocati": mmss,
-                    "Percentuale": perc
-                })
-            elif cat_name == "mov4_coppia_portiere":
-                dfs[cat_name].append({
-                    "Portiere": key[1],
-                    "Giocatori": key[2],
-                    "Minuti_giocati": mmss,
-                    "Percentuale": perc
-                })
+            # elif cat_name == "mov4_coppie":  # COMMENTATO
+            #     dfs[cat_name].append({
+            #         "Giocatori": key[1],
+            #         "Minuti_giocati": mmss,
+            #         "Percentuale": perc
+            #     })
+            # elif cat_name == "mov4_coppia_portiere":  # COMMENTATO
+            #     dfs[cat_name].append({
+            #         "Portiere": key[1],
+            #         "Giocatori": key[2],
+            #         "Minuti_giocati": mmss,
+            #         "Percentuale": perc
+            #     })
             elif cat_name in ["mov4_quartetto", "mov3_senza_portiere", "mov3_con_portiere", "mov5_senza_portiere"]:
                 dfs[cat_name].append({
                     "Giocatori_movimento": key[1],
@@ -820,9 +820,9 @@ with tabs[4]:
 
     categorie_viste = [
         ("mov4_portieri", "Portieri"),
-        ("mov4_singoli", "Giocatori di movimento (singoli)"),
-        ("mov4_coppie", "Coppie di movimento"),
-        ("mov4_quartetto", "Quartetto di movimento"),
+        ("mov4_singoli", "Singoli"),
+        # ("mov4_coppie", "Coppie di movimento"),  # COMMENTATO - mantenere solo singoli e quartetti
+        ("mov4_quartetto", "Quartetto"),
         ("mov5_senza_portiere", "Quinto uomo (5 giocatori di movimento)")
     ]
 

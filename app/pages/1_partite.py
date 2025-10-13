@@ -80,7 +80,8 @@ if df.empty:
 # --- Data cleaning/normalizzazione ---
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 df = df.copy()
-df['dove'] = pd.to_numeric(df.get('dove', None), errors='coerce').fillna(0).astype(int)
+# Non convertire i NaN a 0, lasciarli come valori mancanti per l'analisi delle zone
+df['dove'] = pd.to_numeric(df.get('dove', None), errors='coerce').astype('Int64')
 df['Periodo'] = tag_primo_secondo_tempo(df)
 df['tempoEffettivo'] = calcola_tempo_effettivo(df)
 df['tempoReale'] = calcola_tempo_reale(df)
@@ -356,7 +357,7 @@ with tabs[3]:
             zone_attacco = report_zona['squadra']['attacco']
             if zone_attacco:
                 first_zone = next(iter(zone_attacco.values()))
-                metriche_attacco = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'laterali'] # list(first_zone.keys())
+                metriche_attacco = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'laterali', 'palle_perse'] # list(first_zone.keys())
                 stat_keys_att_sel = st.multiselect(
                     "Statistiche attacco (squadra)",
                     metriche_attacco,
@@ -380,7 +381,7 @@ with tabs[3]:
             zone_difesa = report_zona['squadra']['difesa']
             if zone_difesa:
                 first_zone = next(iter(zone_difesa.values()))
-                metriche_difesa = ['gol_subiti', 'tiri_totali_subiti', 'tiri_in_porta_totali_subiti', 'tiri_ribattuti_da_noi', 'tiri_fuori_loro', 'palo_traversa_loro', 'laterale_loro'] # list(first_zone.keys())
+                metriche_difesa = ['gol_subiti', 'tiri_totali_subiti', 'tiri_in_porta_totali_subiti', 'tiri_ribattuti_da_noi', 'tiri_fuori_loro', 'palo_traversa_loro', 'laterale_loro', 'palle_recuperate'] # list(first_zone.keys())
                 stat_keys_dif_sel = st.multiselect(
                     "Statistiche difesa (squadra)",
                     metriche_difesa,
@@ -484,10 +485,9 @@ with tabs[4]:
     # Mostra solo le categorie richieste, con titoli parlanti, raggruppate per periodo in sezioni comprimibili
     categorie_viste = [
         ("mov4_portieri", "Portieri"),
-        ("mov4_singoli", "Giocatori di movimento (singoli)")
-        ,
-        ("mov4_coppie", "Coppie di movimento"),
-        ("mov4_quartetto", "Quartetto di movimento"),
+        ("mov4_singoli", "Singoli"),
+        # ("mov4_coppie", "Coppie di movimento"),  # COMMENTATO - mantenere solo singoli e quartetti
+        ("mov4_quartetto", "Quartetti"),
         ("mov5_senza_portiere", "Quinto uomo (5 giocatori di movimento)")
     ]
 
