@@ -5,6 +5,7 @@ import pandas as pd
 from futsal_analysis.config_supabase import get_supabase_client
 from futsal_analysis.utils_time import *
 from futsal_analysis.utils_eventi import *
+from futsal_analysis.dashboard_utils import render_panoramica_stagione
 
 st.set_page_config(page_title="Home", page_icon="🏠", layout="wide")
 
@@ -75,16 +76,15 @@ categoria_scelta = st.selectbox(
 # Aggiorna la categoria in session_state
 st.session_state['categoria_selezionata'] = categoria_scelta
 
-st.markdown(f"### Panoramica Stagione - Campionato ({categoria_scelta})")
-st.markdown("---")
+# st.markdown(f"### Panoramica Stagione - Campionato ({categoria_scelta})")
 
 # --- Carica dati del campionato FILTRATI PER CATEGORIA ---
-res = supabase.table("partite").select("*").eq("competizione", "campionato").eq("categoria", categoria_scelta).order("data", desc=True).execute()
+res = supabase.table("partite").select("*").eq("competizione", "Campionato").eq("categoria", categoria_scelta).order("data", desc=True).execute()
 partite_campionato = res.data
 
 if not partite_campionato:
     st.warning("Nessuna partita di campionato trovata.")
-    st.info("Usa il menu a sinistra per navigare nell'applicazione 👈")
+    # st.info("Usa il menu a sinistra per navigare nell'applicazione 👈")
     st.stop()
 
 # --- Carica eventi ---
@@ -105,208 +105,8 @@ df_all['Periodo'] = tag_primo_secondo_tempo(df_all)
 df_all['tempoEffettivo'] = calcola_tempo_effettivo(df_all)
 df_all['tempoReale'] = calcola_tempo_reale(df_all)
 
-# --- CALCOLO METRICHE ---
-num_partite = len(partite_campionato)
-
-# Gol per partita
-gol_fatti_totali = len(df_all[(df_all['evento'] == 'Gol') & (df_all['squadra'] == 'Noi')])
-gol_subiti_totali = len(df_all[(df_all['evento'] == 'Gol') & (df_all['squadra'] == 'Loro')])
-gol_medi_fatti = gol_fatti_totali / num_partite if num_partite > 0 else 0
-gol_medi_subiti = gol_subiti_totali / num_partite if num_partite > 0 else 0
-
-# Tiri per partita
-tiri_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi')])
-tiri_medi = tiri_totali / num_partite if num_partite > 0 else 0
-
-tiri_subiti_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro')])
-tiri_subiti_medi = tiri_subiti_totali / num_partite if num_partite > 0 else 0
-
-# Palle perse/recuperate per partita
-palle_perse_totali = len(df_all[(df_all['evento'].str.contains('Palla persa', na=False))])
-palle_recuperate_totali = len(df_all[(df_all['evento'].str.contains('Palla recuperata', na=False))])
-palle_perse_medie = palle_perse_totali / num_partite if num_partite > 0 else 0
-palle_recuperate_medie = palle_recuperate_totali / num_partite if num_partite > 0 else 0
-
-# Falli per partita
-falli_fatti_totali = len(df_all[(df_all['evento'].str.contains('Fallo', na=False)) & (df_all['squadra'] == 'Noi')])
-falli_subiti_totali = len(df_all[(df_all['evento'].str.contains('Fallo', na=False)) & (df_all['squadra'] == 'Loro')])
-falli_medi_fatti = falli_fatti_totali / num_partite if num_partite > 0 else 0
-falli_medi_subiti = falli_subiti_totali / num_partite if num_partite > 0 else 0
-
-# Percentuale tiri in porta
-tiri_in_porta_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi') & df_all['esito'].isin(['Parata', 'Gol'])])
-perc_tiri_in_porta = (tiri_in_porta_totali / tiri_totali * 100) if tiri_totali > 0 else 0
-
-# Percentuale conversione tiri in gol
-perc_conversione = (gol_fatti_totali / tiri_totali * 100) if tiri_totali > 0 else 0
-
-# Calcola vittorie, pareggi, sconfitte
-risultati = {'V': 0, 'P': 0, 'S': 0}
-for p_id in partite_ids:
-    df_partita = df_all[df_all['partita_id'] == p_id]
-    gol_fatti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Noi')])
-    gol_subiti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Loro')])
-    if gol_fatti > gol_subiti:
-        risultati['V'] += 1
-    elif gol_fatti < gol_subiti:
-        risultati['S'] += 1
-    else:
-        risultati['P'] += 1
-
-# Calcola punti (3 per vittoria, 1 per pareggio)
-punti_totali = risultati['V'] * 3 + risultati['P']
-
-# --- VISUALIZZAZIONE METRICHE ---
-st.markdown("---")
-
-# Prima riga - Metriche principali
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{num_partite}</div>
-        <div class="metric-label">Partite Giocate</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    color = "#2e7d32" if risultati['V'] >= risultati['S'] else "#c62828"
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: {color}; font-size: 1.5em;">{risultati['V']}V - {risultati['P']}P - {risultati['S']}S</div>
-        <div class="metric-label">Risultati</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #1976d2;">{punti_totali}</div>
-        <div class="metric-label">Punti Totali</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    diff_gol = gol_fatti_totali - gol_subiti_totali
-    color = "#2e7d32" if diff_gol > 0 else "#c62828" if diff_gol < 0 else "#666"
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: {color};">{diff_gol:+d}</div>
-        <div class="metric-label">Differenza Reti</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Seconda riga - Gol
-col5, col6, col7, col8 = st.columns(4)
-
-with col5:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #2e7d32;">{gol_medi_fatti:.2f}</div>
-        <div class="metric-label">Gol Fatti/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col6:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #c62828;">{gol_medi_subiti:.2f}</div>
-        <div class="metric-label">Gol Subiti/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col7:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #2e7d32;">{gol_fatti_totali}</div>
-        <div class="metric-label">Gol Totali Fatti</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col8:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #c62828;">{gol_subiti_totali}</div>
-        <div class="metric-label">Gol Totali Subiti</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Terza riga - Tiri
-col9, col10, col11, col12 = st.columns(4)
-
-with col9:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{tiri_medi:.2f}</div>
-        <div class="metric-label">Tiri/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col10:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{perc_tiri_in_porta:.1f}%</div>
-        <div class="metric-label">Tiri in Porta</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col11:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{perc_conversione:.1f}%</div>
-        <div class="metric-label">Conversione Tiri-Gol</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col12:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{tiri_subiti_medi:.2f}</div>
-        <div class="metric-label">Tiri Subiti/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Quarta riga - Possesso palla
-col13, col14, col15, col16 = st.columns(4)
-
-with col13:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #d84315;">{palle_perse_medie:.2f}</div>
-        <div class="metric-label">Palle Perse/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col14:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value" style="color: #1565c0;">{palle_recuperate_medie:.2f}</div>
-        <div class="metric-label">Palle Recuperate/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col15:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{falli_medi_fatti:.2f}</div>
-        <div class="metric-label">Falli Fatti/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col16:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{falli_medi_subiti:.2f}</div>
-        <div class="metric-label">Falli Subiti/Partita</div>
-    </div>
-    """, unsafe_allow_html=True)
+# --- PANORAMICA STAGIONE ---
+render_panoramica_stagione(df_all, partite_ids)
 
 # --- ULTIME PARTITE ---
 st.markdown("---")
@@ -328,7 +128,7 @@ for partita in ultime_5:
         risultato_label = "❌ Sconfitta"
         color = "#ffebee"
     else:
-        risultato_label = "➖ Pareggio"
+        risultato_label = "🟰 Pareggio"
         color = "#fff9c4"
     
     col_data, col_avv, col_ris, col_risultato = st.columns([1, 2, 1, 1])
@@ -348,4 +148,4 @@ for partita in ultime_5:
 
 # --- FOOTER ---
 st.markdown("---")
-st.info("👈 Usa il menu a sinistra per esplorare analisi dettagliate, statistiche individuali e molto altro!")
+

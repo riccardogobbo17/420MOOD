@@ -37,7 +37,7 @@ def calcola_report_zona(df):
         return {
             'gol_fatti': df[mask_gol_noi],
             'tiri_totali': df[mask_tiro_noi],
-            'tiri_in_porta': df[mask_tiro_noi & df['esito'].isin(['Parata', 'Gol'])],
+            'tiri_in_porta_totali': df[mask_tiro_noi & df['esito'].isin(['Parata', 'Gol'])],
             'tiri_ribattuti': df[mask_tiro_noi & (df['esito'] == 'Ribattuto')],
             'tiri_fuori': df[mask_tiro_noi & (df['esito'] == 'Fuori')],
             'palo_traversa': df[mask_tiro_noi & (df['esito'] == 'Palo')],
@@ -45,6 +45,7 @@ def calcola_report_zona(df):
             'laterali': df[(df['evento'].str.contains('Laterale', na=False)) & (df['squadra'] == 'Noi')],
             'rigori': df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Noi')],
             'tiri_liberi': df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Noi')],
+            'palle_perse': df[(df['evento'].str.contains('Palla persa', na=False))],
         }
 
     def build_metrics_difesa(df):
@@ -52,14 +53,15 @@ def calcola_report_zona(df):
         mask_gol_loro = (df['evento'].str.contains('Gol', na=False)) & (df['squadra'] == 'Loro')
         return {
             'gol_subiti': df[mask_gol_loro],
-            'tiri_subiti': df[mask_tiro_loro],
-            'tiri_in_porta_subiti': df[mask_tiro_loro & df['esito'].isin(['Parata', 'Gol'])],
-            'tiri_loro_ribattuti_da_noi': df[mask_tiro_loro & (df['esito'] == 'Ribattuto')],
-            'tiri_fuori_subiti': df[mask_tiro_loro & (df['esito'] == 'Fuori')],
-            'tiri_loro_palo_traversa': df[mask_tiro_loro & (df['esito'] == 'Palo')],
-            'angoli_subiti': df[(df['evento'].str.contains('Angolo', na=False)) & (df['squadra'] == 'Loro')],
-            'laterali_subiti': df[(df['evento'].str.contains('Laterale', na=False)) & (df['squadra'] == 'Loro')],
-            'rigori_subiti': df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Loro')],
+            'tiri_totali_subiti': df[mask_tiro_loro],
+            'tiri_in_porta_totali_subiti': df[mask_tiro_loro & df['esito'].isin(['Parata', 'Gol'])],
+            'tiri_ribattuti_da_noi': df[mask_tiro_loro & (df['esito'] == 'Ribattuto')],
+            'tiri_fuori_loro': df[mask_tiro_loro & (df['esito'] == 'Fuori')],
+            'palo_traversa_loro': df[mask_tiro_loro & (df['esito'] == 'Palo')],
+            'angoli_loro': df[(df['evento'].str.contains('Angolo', na=False)) & (df['squadra'] == 'Loro')],
+            'laterale_loro': df[(df['evento'].str.contains('Laterale', na=False)) & (df['squadra'] == 'Loro')],
+            'tiri_liberi_subiti': df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Loro')],
+            'palle_recuperate': df[(df['evento'].str.contains('Palla recuperata', na=False))],
         }
 
     def build_metrics_falli(df):

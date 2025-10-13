@@ -9,8 +9,8 @@ def calcola_minutaggi(df, df_1t, df_2t):
       ▸ mov4_portieri
       ▸ mov4_singoli
       ▸ mov4_singolo_portiere           (portiere + 1 giocatore di movimento)
-      ▸ mov4_coppie                     (2 giocatori movimento)
-      ▸ mov4_coppia_portiere            (portiere + 2 giocatori movimento)
+      # ▸ mov4_coppie                     (2 giocatori movimento) - COMMENTATO
+      # ▸ mov4_coppia_portiere            (portiere + 2 giocatori movimento) - COMMENTATO
       ▸ mov4_quartetto                  (4 giocatori movimento)
       ▸ mov4_quartetto_portiere         (portiere + 4 giocatori movimento)
       ▸ mov3_senza_portiere             (3 giocatori movimento)
@@ -110,15 +110,15 @@ def calcola_minutaggi(df, df_1t, df_2t):
 
             # --------- Altre combinazioni come da logica originale ---------
             if mov_len == 4:
-                # coppie di movimento
-                for c in combinations(movimento, 2):
-                    acc[("mov4_coppie", tuple(sorted(c)))] += delta
+                # # coppie di movimento - COMMENTATO
+                # for c in combinations(movimento, 2):
+                #     acc[("mov4_coppie", tuple(sorted(c)))] += delta
 
-                # coppia + portiere
-                if portiere:
-                    for c in combinations(movimento, 2):
-                        trio = (portiere, *sorted(c))   
-                        acc[("mov4_coppia_portiere", trio)] += delta
+                # # coppia + portiere - COMMENTATO
+                # if portiere:
+                #     for c in combinations(movimento, 2):
+                #         trio = (portiere, *sorted(c))   
+                #         acc[("mov4_coppia_portiere", trio)] += delta
 
                 # quartetto (solo mov)
                 acc[("mov4_quartetto", tuple(movimento))] += delta
@@ -173,24 +173,24 @@ def calcola_minutaggi(df, df_1t, df_2t):
                     "Percentuale": perc
                 })
 
-            elif cat == "mov4_coppie":
-                g1, g2 = key
-                df = dfs.setdefault(cat, [])
-                df.append({
-                    "Giocatori": (g1, g2),
-                    "Minuti_giocati": mmss,
-                    "Percentuale": perc
-                })
+            # elif cat == "mov4_coppie":  # COMMENTATO
+            #     g1, g2 = key
+            #     df = dfs.setdefault(cat, [])
+            #     df.append({
+            #         "Giocatori": (g1, g2),
+            #         "Minuti_giocati": mmss,
+            #         "Percentuale": perc
+            #     })
 
-            elif cat == "mov4_coppia_portiere":
-                port, g1, g2 = key
-                df = dfs.setdefault(cat, [])
-                df.append({
-                    "Portiere": port,
-                    "Giocatori": (g1, g2),
-                    "Minuti_giocati": mmss,
-                    "Percentuale": perc
-                })
+            # elif cat == "mov4_coppia_portiere":  # COMMENTATO
+            #     port, g1, g2 = key
+            #     df = dfs.setdefault(cat, [])
+            #     df.append({
+            #         "Portiere": port,
+            #         "Giocatori": (g1, g2),
+            #         "Minuti_giocati": mmss,
+            #         "Percentuale": perc
+            #     })
 
             elif cat == "mov4_quartetto":
                 df = dfs.setdefault(cat, [])

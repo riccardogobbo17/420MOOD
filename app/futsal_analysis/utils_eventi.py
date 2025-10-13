@@ -104,15 +104,15 @@ def calcola_palle_recuperate_perse(df, by_zona=False):
     else:
         stats = {}
         mask_rec = (df['evento'].str.contains('Palla recuperata', na=False))
-        stats['palla_recuperata_totali'] = len(df[mask_rec])
-        stats['palla_recuperata_ripartenza'] = len(df[mask_rec & (df['esito'] == 'Ripartenza')])
-        stats['palla_recuperata_costruzione'] = len(df[mask_rec & (df['esito'] == 'Costruzione')])
-        stats['palla_recuperata_fuori'] = len(df[mask_rec & (df['esito'] == 'Fuori')])
+        stats['palla_recuperata'] = len(df[mask_rec])
+        # stats['palla_recuperata_ripartenza'] = len(df[mask_rec & (df['esito'] == 'Ripartenza')])
+        # stats['palla_recuperata_costruzione'] = len(df[mask_rec & (df['esito'] == 'Costruzione')])
+        # stats['palla_recuperata_fuori'] = len(df[mask_rec & (df['esito'] == 'Fuori')])
         mask_persa = (df['evento'].str.contains('Palla persa', na=False))
-        stats['palla_persa_totali'] = len(df[mask_persa])
-        stats['palla_persa_ripartenza'] = len(df[mask_persa & (df['esito'] == 'Ripartenza')])
-        stats['palla_persa_costruzione'] = len(df[mask_persa & (df['esito'] == 'Costruzione')])
-        stats['palla_persa_fuori'] = len(df[mask_persa & (df['esito'] == 'Fuori')])
+        stats['palla_persa'] = len(df[mask_persa])
+        # stats['palla_persa_ripartenza'] = len(df[mask_persa & (df['esito'] == 'Ripartenza')])
+        # stats['palla_persa_costruzione'] = len(df[mask_persa & (df['esito'] == 'Costruzione')])
+        # stats['palla_persa_fuori'] = len(df[mask_persa & (df['esito'] == 'Fuori')])
         return stats
 
 def calcola_falli(df, by_zona=False):
@@ -133,40 +133,40 @@ def calcola_falli(df, by_zona=False):
         stats = {}
         mask_fatti = (df['evento'].str.contains('Fallo', na=False)) & (df['squadra'] == 'Noi')
         mask_subiti = (df['evento'].str.contains('Fallo', na=False)) & (df['squadra'] == 'Loro')
-        stats['falli_fatti'] = len(df[mask_fatti])
+        stats['falli'] = len(df[mask_fatti])
         stats['falli_subiti'] = len(df[mask_subiti])
 
-        mask_fatti_attacco = mask_fatti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) > 0)
-        mask_fatti_difesa  = mask_fatti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) == 0)
-        mask_subiti_attacco = mask_subiti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) > 0)
-        mask_subiti_difesa  = mask_subiti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) == 0)
+        # mask_fatti_attacco = mask_fatti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) > 0)
+        # mask_fatti_difesa  = mask_fatti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) == 0)
+        # mask_subiti_attacco = mask_subiti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) > 0)
+        # mask_subiti_difesa  = mask_subiti & (pd.to_numeric(df['dove'], errors='coerce').fillna(0).astype(int) == 0)
 
-        stats['falli_fatti_zona_attacco'] = len(df[mask_fatti_attacco])
-        stats['falli_fatti_zona_difesa'] = len(df[mask_fatti_difesa])
-        stats['falli_subiti_zona_attacco'] = len(df[mask_subiti_attacco])
-        stats['falli_subiti_zona_difesa'] = len(df[mask_subiti_difesa])
+        # stats['falli_fatti_zona_attacco'] = len(df[mask_fatti_attacco])
+        # stats['falli_fatti_zona_difesa'] = len(df[mask_fatti_difesa])
+        # stats['falli_subiti_zona_attacco'] = len(df[mask_subiti_attacco])
+        # stats['falli_subiti_zona_difesa'] = len(df[mask_subiti_difesa])
 
-        stats['ammonizioni_fatti'] = len(df[(df['evento'].str.contains('Ammonizione', na=False)) & (df['squadra'] == 'Noi')])
-        stats['espulsioni_fatti'] = len(df[(df['evento'].str.contains('Espulsione', na=False)) & (df['squadra'] == 'Noi')])
-        stats['ammonizioni_subiti'] = len(df[(df['evento'].str.contains('Ammonizione', na=False)) & (df['squadra'] == 'Loro')])
-        stats['espulsioni_subiti'] = len(df[(df['evento'].str.contains('Espulsione', na=False)) & (df['squadra'] == 'Loro')])
+        stats['ammonizioni'] = len(df[(df['evento'].str.contains('Ammonizione', na=False)) & (df['squadra'] == 'Noi')])
+        stats['espulsioni'] = len(df[(df['evento'].str.contains('Espulsione', na=False)) & (df['squadra'] == 'Noi')])
+        stats['ammonizioni_loro'] = len(df[(df['evento'].str.contains('Ammonizione', na=False)) & (df['squadra'] == 'Loro')])
+        stats['espulsioni_loro'] = len(df[(df['evento'].str.contains('Espulsione', na=False)) & (df['squadra'] == 'Loro')])
         return stats
 
 def calcola_ripartenze(df):
     rip = {}
     # Ripartenze create da noi
-    rip['3v2'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('3v2', na=False))])
-    rip['2v2'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('2v2', na=False))])
-    rip['2v1'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('2v1', na=False))])
-    rip['1v1'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('1v1', na=False))])
-    rip['ripartenze_totali'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi')])
+    # rip['3v2'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('3v2', na=False))])
+    # rip['2v2'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('2v2', na=False))])
+    # rip['2v1'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('2v1', na=False))])
+    # rip['1v1'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi') & (df['esito'].str.contains('1v1', na=False))])
+    rip['ripartenze'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Noi')])
     
     # Ripartenze subite da noi (create da loro)
-    rip['3v2_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('3v2', na=False))])
-    rip['2v2_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('2v2', na=False))])
-    rip['2v1_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('2v1', na=False))])
-    rip['1v1_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('1v1', na=False))])
-    rip['ripartenze_subite_totali'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro')])
+    # rip['3v2_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('3v2', na=False))])
+    # rip['2v2_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('2v2', na=False))])
+    # rip['2v1_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('2v1', na=False))])
+    # rip['1v1_subiti'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro') & (df['esito'].str.contains('1v1', na=False))])
+    rip['ripartenze_loro'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro')])
     return rip
 
 # ----------- STATS INDIVIDUALI -----------
@@ -215,11 +215,11 @@ def calcola_stats_portieri_individuali(df, by_zona=False):
             'parate': lambda d: ((d['evento'].str.contains('Parata', na=False)) & (d['squadra'] == 'Noi')) |
                                 ((d['evento'].str.contains('Tiro', na=False)) & (d['squadra'] == 'Loro') & (d['esito'] == 'Parata')),
             'lanci': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi'),
-            'lanci_corretti': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Gol', '', None])),
-            'lanci_sbagliati': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori'])),
+            'lanci_corretti': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Gol', 'OK'])),
+            'lanci_sbagliati': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori', '', None])),
             'integrazione_portiere': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi'),
-            'integrazione_portiere_ok': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['', None])),
-            'integrazione_portiere_ko': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori'])),
+            'integrazione_portiere_ok': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Gol', 'OK'])),
+            'integrazione_portiere_ko': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori', '', None])),
         }
 
     if by_zona:
@@ -244,12 +244,12 @@ def calcola_stats_portieri_squadra(df, squadra='Noi'):
                       ((df['evento'].str.contains('Tiro', na=False)) & (df['squadra'] == 'Noi') & (df['esito'] == 'Parata'))
 
     mask_lancio = (df['evento'].str.contains('Lancio', na=False)) & mask_sq
-    mask_lancio_ok = mask_lancio & (df['esito'].isin(['Gol', '', None]))
-    mask_lancio_ko = mask_lancio & (df['esito'].isin(['Intercetto', 'Fuori']))
+    mask_lancio_ok = mask_lancio & (df['esito'].isin(['Gol', 'OK']))
+    mask_lancio_ko = mask_lancio & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))
 
     mask_int = (df['evento'].str.contains('Integrazione portier', na=False)) & mask_sq
-    mask_int_ok = mask_int & (df['esito'].isin(['', None]))
-    mask_int_ko = mask_int & (df['esito'].isin(['Intercetto', 'Fuori']))
+    mask_int_ok = mask_int & (df['esito'].isin(['Gol', 'OK']))
+    mask_int_ko = mask_int & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))
 
     stats = {
         'parate': len(df[mask_parata]),
