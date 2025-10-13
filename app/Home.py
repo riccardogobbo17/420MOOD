@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 
 # Moduli locali
 from futsal_analysis.config_supabase import get_supabase_client
@@ -44,9 +45,16 @@ st.markdown("""
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     try:
-        st.image("imgs/logoFMP.png", width=100)
-    except:
-        pass
+        # Usa percorso assoluto per compatibilità con deployment
+        logo_path = os.path.join(os.path.dirname(__file__), "imgs", "logoFMP.png")
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=100)
+        else:
+            # Fallback al percorso relativo per compatibilità locale
+            st.image("imgs/logoFMP.png", width=100)
+    except Exception as e:
+        # Se non riesce a caricare l'immagine, continua senza errori
+        st.markdown("🏠")
 with col_title:
     st.title("🏠 FMP Dashboard")
 
