@@ -21,7 +21,7 @@ def parse_data_sicura(data_str):
             return pd.NaT
 
 
-def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
+def preprocess_eventi(df: pd.DataFrame, partita_id: str, categoria: str = None) -> pd.DataFrame:
     df = df.rename(columns={
         "Posizione": "posizione",
         "Position": "posizione",
@@ -40,31 +40,32 @@ def preprocess_eventi(df: pd.DataFrame, partita_id: str) -> pd.DataFrame:
 
     df["partita_id"] = partita_id
 
-    if "quartetto" in df.columns:
-        # splitto in massimo 5 colonne (0–4)
-        split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
+    # Gestione diversa per categorie u15/u17 (CSV semplificato)
+    if categoria and categoria.lower() in ['u15', 'u17']:
+        # Per u15/u17, le colonne mancanti vengono impostate a stringa vuota
+        colonne_manche = ["portiere", "quartetto", "chi", "esito", "piede"]
+        for col in colonne_manche:
+            if col not in df.columns:
+                df[col] = ""
+        
+        # Non processare quartetto per u15/u17
+        split_cols = None
+    else:
+        # Gestione normale per Prima Squadra e U19
+        if "quartetto" in df.columns:
+            # splitto in massimo 5 colonne (0–4)
+            split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
 
-        # sostituisco la colonna originale col primo giocatore
-        df["quartetto"] = split_cols[0].str.strip()
+            # sostituisco la colonna originale col primo giocatore
+            df["quartetto"] = split_cols[0].str.strip()
 
-    # creo le altre colonne (dal 2° giocatore in poi)
-    for i in range(1, 5):  # dal secondo fino al quinto
-        col_name = f"quartetto_{i}"
-        if i < split_cols.shape[1]:
-            df[col_name] = split_cols[i].str.strip()
-        else:
-            df[col_name] = None  # oppure "" se vuoi stringa vuota
-
-
-    # # Split quartetto
-    # if "quartetto" in df.columns:
-    #     split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
-    #     for i in range(4):
-    #         col_name = f"quartetto_{i+1}"
-    #         if i < split_cols.shape[1]:
-    #             df[col_name] = split_cols[i].str.strip()
-    #         else:
-    #             df[col_name] = ""
+        # creo le altre colonne (dal 2° giocatore in poi)
+        for i in range(1, 5):  # dal secondo fino al quinto
+            col_name = f"quartetto_{i}"
+            if split_cols is not None and i < split_cols.shape[1]:
+                df[col_name] = split_cols[i].str.strip()
+            else:
+                df[col_name] = None  # oppure "" se vuoi stringa vuota
 
     # Conversione data → YYYY-MM-DD
     if "data" in df.columns:
@@ -147,6 +148,11 @@ file = st.file_uploader("Carica CSV eventi", type=["csv"])
 
 if file and partita_scelta:
     partita_id = partita_scelta.split("(")[-1].strip(")")
+    
+    # Estrai la categoria dalla partita selezionata
+    partita_info = next((p for p in partite if p['id'] == partita_id), None)
+    categoria = partita_info.get('categoria', 'Prima Squadra') if partita_info else 'Prima Squadra'
+    
     # Forza le colonne problematiche a essere stringhe per evitare errori PyArrow
     dtype_dict = {
         'Dove': str,
@@ -161,8 +167,8 @@ if file and partita_scelta:
     }
     df_raw = pd.read_csv(file, dtype=dtype_dict)
 
-    # ✅ Preprocessing
-    df = preprocess_eventi(df_raw, partita_id)
+    # ✅ Preprocessing con categoria
+    df = preprocess_eventi(df_raw, partita_id, categoria)
     eventi_data = df.to_dict(orient="records")
 
     st.write("Anteprima dati preprocessati:")

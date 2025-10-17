@@ -494,11 +494,20 @@ def normalizza_stats_quartetti(df_stats, minutaggi_data):
     
     return df
 
-# --- Calcola minutaggi una volta per tutti i tabs ---
-minutaggi = aggrega_minutaggi_partite(partite_ids, df_all)
+# --- Calcola minutaggi una volta per tutti i tabs (solo per categorie complete) ---
+if categoria_attiva.lower() not in ['u15', 'u17']:
+    minutaggi = aggrega_minutaggi_partite(partite_ids, df_all)
+else:
+    minutaggi = None
 
-# --- TABS ---
-tabs = st.tabs(["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
+# --- TABS DINAMICI BASATI SULLA CATEGORIA ---
+# Per u15/u17 nascondiamo Stats Individuali, Stats Quartetti e Minutaggi
+if categoria_attiva.lower() in ['u15', 'u17']:
+    tabs = st.tabs(["Stats Squadra", "Zone"])
+    tab_names = ["Stats Squadra", "Zone"]
+else:
+    tabs = st.tabs(["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
+    tab_names = ["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
 
 # === TAB 1: Stats Squadra ===
 with tabs[0]:
@@ -552,144 +561,146 @@ with tabs[0]:
             render_section("Loro", report_eventi['squadra']['portieri_loro'])
 
 # === TAB 2: Stats Individuali ===
-with tabs[1]:
-    st.header("Statistiche individuali giocatori aggregate")
+if "Stats Individuali" in tab_names:
+    with tabs[tab_names.index("Stats Individuali")]:
+        st.header("Statistiche individuali giocatori aggregate")
     
-    with st.expander("👥 Giocatori - Totale", expanded=False):
-        df_tot = pd.DataFrame(report_eventi['individuali_split']['Totale']).T
-        # Normalizza le statistiche
-        df_tot = normalizza_stats_individuali(df_tot, minutaggi['totale'], tipo='giocatore')
-        # Riordina colonne: metti minuti_giocati all'inizio, poi stats grezze, poi normalizzate
-        cols = ['minuti_giocati'] + [c for c in df_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_tot.columns if '_per_partita' in c]
-        df_tot = df_tot[cols]
-        df_tot = format_column_names(df_tot)
-        df_tot = format_index_names(df_tot)
-        st.dataframe(df_tot, use_container_width=True)
-    
-    with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
-        df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
-        df_1t = normalizza_stats_individuali(df_1t, minutaggi['primo_tempo'], tipo='giocatore')
-        cols = ['minuti_giocati'] + [c for c in df_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_1t.columns if '_per_partita' in c]
-        df_1t = df_1t[cols]
-        df_1t = format_column_names(df_1t)
-        df_1t = format_index_names(df_1t)
-        st.dataframe(df_1t, use_container_width=True)
-    
-    with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
-        df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
-        df_2t = normalizza_stats_individuali(df_2t, minutaggi['secondo_tempo'], tipo='giocatore')
-        cols = ['minuti_giocati'] + [c for c in df_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_2t.columns if '_per_partita' in c]
-        df_2t = df_2t[cols]
-        df_2t = format_column_names(df_2t)
-        df_2t = format_index_names(df_2t)
-        st.dataframe(df_2t, use_container_width=True)
+        with st.expander("👥 Giocatori - Totale", expanded=False):
+            df_tot = pd.DataFrame(report_eventi['individuali_split']['Totale']).T
+            # Normalizza le statistiche
+            df_tot = normalizza_stats_individuali(df_tot, minutaggi['totale'], tipo='giocatore')
+            # Riordina colonne: metti minuti_giocati all'inizio, poi stats grezze, poi normalizzate
+            cols = ['minuti_giocati'] + [c for c in df_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_tot.columns if '_per_partita' in c]
+            df_tot = df_tot[cols]
+            df_tot = format_column_names(df_tot)
+            df_tot = format_index_names(df_tot)
+            st.dataframe(df_tot, use_container_width=True)
+        
+        with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
+            df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
+            df_1t = normalizza_stats_individuali(df_1t, minutaggi['primo_tempo'], tipo='giocatore')
+            cols = ['minuti_giocati'] + [c for c in df_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_1t.columns if '_per_partita' in c]
+            df_1t = df_1t[cols]
+            df_1t = format_column_names(df_1t)
+            df_1t = format_index_names(df_1t)
+            st.dataframe(df_1t, use_container_width=True)
+        
+        with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
+            df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
+            df_2t = normalizza_stats_individuali(df_2t, minutaggi['secondo_tempo'], tipo='giocatore')
+            cols = ['minuti_giocati'] + [c for c in df_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_2t.columns if '_per_partita' in c]
+            df_2t = df_2t[cols]
+            df_2t = format_column_names(df_2t)
+            df_2t = format_index_names(df_2t)
+            st.dataframe(df_2t, use_container_width=True)
 
-    st.header("Statistiche portieri individuali aggregate")
-    
-    with st.expander("🥅 Portieri - Totale", expanded=False):
-        df_port_tot = pd.DataFrame(report_eventi['portieri_individuali_split']['Totale']).T
-        df_port_tot = normalizza_stats_individuali(df_port_tot, minutaggi['totale'], tipo='portiere')
-        cols = ['minuti_giocati'] + [c for c in df_port_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_tot.columns if '_per_partita' in c]
-        df_port_tot = df_port_tot[cols]
-        df_port_tot = format_column_names(df_port_tot)
-        df_port_tot = format_index_names(df_port_tot)
-        st.dataframe(df_port_tot, use_container_width=True)
-    
-    with st.expander("🥅 Portieri - Primo Tempo", expanded=False):
-        df_port_1t = pd.DataFrame(report_eventi['portieri_individuali_split']['1T']).T
-        df_port_1t = normalizza_stats_individuali(df_port_1t, minutaggi['primo_tempo'], tipo='portiere')
-        cols = ['minuti_giocati'] + [c for c in df_port_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_1t.columns if '_per_partita' in c]
-        df_port_1t = df_port_1t[cols]
-        df_port_1t = format_column_names(df_port_1t)
-        df_port_1t = format_index_names(df_port_1t)
-        st.dataframe(df_port_1t, use_container_width=True)
-    
-    with st.expander("🥅 Portieri - Secondo Tempo", expanded=False):
-        df_port_2t = pd.DataFrame(report_eventi['portieri_individuali_split']['2T']).T
-        df_port_2t = normalizza_stats_individuali(df_port_2t, minutaggi['secondo_tempo'], tipo='portiere')
-        cols = ['minuti_giocati'] + [c for c in df_port_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_2t.columns if '_per_partita' in c]
-        df_port_2t = df_port_2t[cols]
-        df_port_2t = format_column_names(df_port_2t)
-        df_port_2t = format_index_names(df_port_2t)
-        st.dataframe(df_port_2t, use_container_width=True)
+        st.header("Statistiche portieri individuali aggregate")
+        
+        with st.expander("🥅 Portieri - Totale", expanded=False):
+            df_port_tot = pd.DataFrame(report_eventi['portieri_individuali_split']['Totale']).T
+            df_port_tot = normalizza_stats_individuali(df_port_tot, minutaggi['totale'], tipo='portiere')
+            cols = ['minuti_giocati'] + [c for c in df_port_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_tot.columns if '_per_partita' in c]
+            df_port_tot = df_port_tot[cols]
+            df_port_tot = format_column_names(df_port_tot)
+            df_port_tot = format_index_names(df_port_tot)
+            st.dataframe(df_port_tot, use_container_width=True)
+        
+        with st.expander("🥅 Portieri - Primo Tempo", expanded=False):
+            df_port_1t = pd.DataFrame(report_eventi['portieri_individuali_split']['1T']).T
+            df_port_1t = normalizza_stats_individuali(df_port_1t, minutaggi['primo_tempo'], tipo='portiere')
+            cols = ['minuti_giocati'] + [c for c in df_port_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_1t.columns if '_per_partita' in c]
+            df_port_1t = df_port_1t[cols]
+            df_port_1t = format_column_names(df_port_1t)
+            df_port_1t = format_index_names(df_port_1t)
+            st.dataframe(df_port_1t, use_container_width=True)
+        
+        with st.expander("🥅 Portieri - Secondo Tempo", expanded=False):
+            df_port_2t = pd.DataFrame(report_eventi['portieri_individuali_split']['2T']).T
+            df_port_2t = normalizza_stats_individuali(df_port_2t, minutaggi['secondo_tempo'], tipo='portiere')
+            cols = ['minuti_giocati'] + [c for c in df_port_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_2t.columns if '_per_partita' in c]
+            df_port_2t = df_port_2t[cols]
+            df_port_2t = format_column_names(df_port_2t)
+            df_port_2t = format_index_names(df_port_2t)
+            st.dataframe(df_port_2t, use_container_width=True)
 
 # === TAB 3: Stats Quartetti ===
-with tabs[2]:
-    st.header("Statistiche per quartetti aggregate")
-    
-    report_quartetti = calcola_report_quartetti_completo(df_all)
-    report_quinto_uomo = calcola_report_quinto_uomo_completo(df_all)
-    
-    with st.expander("👥 Quartetti - Totale", expanded=False):
-        if report_quartetti['Totale']:
-            df_quartetti_tot = pd.DataFrame(report_quartetti['Totale']).T
-            df_quartetti_tot.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_tot.index]
-            df_quartetti_tot = normalizza_stats_quartetti(df_quartetti_tot, minutaggi['totale'])
-            cols = ['minuti_giocati'] + [c for c in df_quartetti_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_tot.columns if '_per_partita' in c]
-            df_quartetti_tot = df_quartetti_tot[cols]
-            df_quartetti_tot = format_column_names(df_quartetti_tot)
-            df_quartetti_tot = format_index_names(df_quartetti_tot)
-            st.dataframe(df_quartetti_tot, use_container_width=True)
-        else:
-            st.info("Nessun quartetto trovato.")
-    
-    with st.expander("👥 Quartetti - Primo Tempo", expanded=False):
-        if report_quartetti['1T']:
-            df_quartetti_1t = pd.DataFrame(report_quartetti['1T']).T
-            df_quartetti_1t.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_1t.index]
-            df_quartetti_1t = normalizza_stats_quartetti(df_quartetti_1t, minutaggi['primo_tempo'])
-            cols = ['minuti_giocati'] + [c for c in df_quartetti_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_1t.columns if '_per_partita' in c]
-            df_quartetti_1t = df_quartetti_1t[cols]
-            df_quartetti_1t = format_column_names(df_quartetti_1t)
-            df_quartetti_1t = format_index_names(df_quartetti_1t)
-            st.dataframe(df_quartetti_1t, use_container_width=True)
-        else:
-            st.info("Nessun quartetto trovato nel primo tempo.")
-    
-    with st.expander("👥 Quartetti - Secondo Tempo", expanded=False):
-        if report_quartetti['2T']:
-            df_quartetti_2t = pd.DataFrame(report_quartetti['2T']).T
-            df_quartetti_2t.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_2t.index]
-            df_quartetti_2t = normalizza_stats_quartetti(df_quartetti_2t, minutaggi['secondo_tempo'])
-            cols = ['minuti_giocati'] + [c for c in df_quartetti_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_2t.columns if '_per_partita' in c]
-            df_quartetti_2t = df_quartetti_2t[cols]
-            df_quartetti_2t = format_column_names(df_quartetti_2t)
-            df_quartetti_2t = format_index_names(df_quartetti_2t)
-            st.dataframe(df_quartetti_2t, use_container_width=True)
-        else:
-            st.info("Nessun quartetto trovato nel secondo tempo.")
-    
-    st.header("Statistiche quinto uomo aggregate")
-    
-    with st.expander("👤 Quinto Uomo - Totale", expanded=False):
-        if report_quinto_uomo['Totale']:
-            df_quinto_tot = pd.DataFrame([report_quinto_uomo['Totale']]).T
-            df_quinto_tot = format_column_names(df_quinto_tot)
-            df_quinto_tot = format_index_names(df_quinto_tot)
-            st.dataframe(df_quinto_tot, use_container_width=True)
-        else:
-            st.info("Nessuna situazione con quinto uomo trovata.")
-    
-    with st.expander("👤 Quinto Uomo - Primo Tempo", expanded=False):
-        if report_quinto_uomo['1T']:
-            df_quinto_1t = pd.DataFrame([report_quinto_uomo['1T']]).T
-            df_quinto_1t = format_column_names(df_quinto_1t)
-            df_quinto_1t = format_index_names(df_quinto_1t)
-            st.dataframe(df_quinto_1t, use_container_width=True)
-        else:
-            st.info("Nessuna situazione con quinto uomo trovata nel primo tempo.")
-    
-    with st.expander("👤 Quinto Uomo - Secondo Tempo", expanded=False):
-        if report_quinto_uomo['2T']:
-            df_quinto_2t = pd.DataFrame([report_quinto_uomo['2T']]).T
-            df_quinto_2t = format_column_names(df_quinto_2t)
-            df_quinto_2t = format_index_names(df_quinto_2t)
-            st.dataframe(df_quinto_2t, use_container_width=True)
-        else:
-            st.info("Nessuna situazione con quinto uomo trovata nel secondo tempo.")
+if "Stats Quartetti" in tab_names:
+    with tabs[tab_names.index("Stats Quartetti")]:
+        st.header("Statistiche per quartetti aggregate")
+        
+        report_quartetti = calcola_report_quartetti_completo(df_all)
+        report_quinto_uomo = calcola_report_quinto_uomo_completo(df_all)
+        
+        with st.expander("👥 Quartetti - Totale", expanded=False):
+            if report_quartetti['Totale']:
+                df_quartetti_tot = pd.DataFrame(report_quartetti['Totale']).T
+                df_quartetti_tot.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_tot.index]
+                df_quartetti_tot = normalizza_stats_quartetti(df_quartetti_tot, minutaggi['totale'])
+                cols = ['minuti_giocati'] + [c for c in df_quartetti_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_tot.columns if '_per_partita' in c]
+                df_quartetti_tot = df_quartetti_tot[cols]
+                df_quartetti_tot = format_column_names(df_quartetti_tot)
+                df_quartetti_tot = format_index_names(df_quartetti_tot)
+                st.dataframe(df_quartetti_tot, use_container_width=True)
+            else:
+                st.info("Nessun quartetto trovato.")
+        
+        with st.expander("👥 Quartetti - Primo Tempo", expanded=False):
+            if report_quartetti['1T']:
+                df_quartetti_1t = pd.DataFrame(report_quartetti['1T']).T
+                df_quartetti_1t.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_1t.index]
+                df_quartetti_1t = normalizza_stats_quartetti(df_quartetti_1t, minutaggi['primo_tempo'])
+                cols = ['minuti_giocati'] + [c for c in df_quartetti_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_1t.columns if '_per_partita' in c]
+                df_quartetti_1t = df_quartetti_1t[cols]
+                df_quartetti_1t = format_column_names(df_quartetti_1t)
+                df_quartetti_1t = format_index_names(df_quartetti_1t)
+                st.dataframe(df_quartetti_1t, use_container_width=True)
+            else:
+                st.info("Nessun quartetto trovato nel primo tempo.")
+        
+        with st.expander("👥 Quartetti - Secondo Tempo", expanded=False):
+            if report_quartetti['2T']:
+                df_quartetti_2t = pd.DataFrame(report_quartetti['2T']).T
+                df_quartetti_2t.index = [tuple(idx.split(';')) if ';' in str(idx) else idx for idx in df_quartetti_2t.index]
+                df_quartetti_2t = normalizza_stats_quartetti(df_quartetti_2t, minutaggi['secondo_tempo'])
+                cols = ['minuti_giocati'] + [c for c in df_quartetti_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_quartetti_2t.columns if '_per_partita' in c]
+                df_quartetti_2t = df_quartetti_2t[cols]
+                df_quartetti_2t = format_column_names(df_quartetti_2t)
+                df_quartetti_2t = format_index_names(df_quartetti_2t)
+                st.dataframe(df_quartetti_2t, use_container_width=True)
+            else:
+                st.info("Nessun quartetto trovato nel secondo tempo.")
+        
+        st.header("Statistiche quinto uomo aggregate")
+        
+        with st.expander("👤 Quinto Uomo - Totale", expanded=False):
+            if report_quinto_uomo['Totale']:
+                df_quinto_tot = pd.DataFrame([report_quinto_uomo['Totale']]).T
+                df_quinto_tot = format_column_names(df_quinto_tot)
+                df_quinto_tot = format_index_names(df_quinto_tot)
+                st.dataframe(df_quinto_tot, use_container_width=True)
+            else:
+                st.info("Nessuna situazione con quinto uomo trovata.")
+        
+        with st.expander("👤 Quinto Uomo - Primo Tempo", expanded=False):
+            if report_quinto_uomo['1T']:
+                df_quinto_1t = pd.DataFrame([report_quinto_uomo['1T']]).T
+                df_quinto_1t = format_column_names(df_quinto_1t)
+                df_quinto_1t = format_index_names(df_quinto_1t)
+                st.dataframe(df_quinto_1t, use_container_width=True)
+            else:
+                st.info("Nessuna situazione con quinto uomo trovata nel primo tempo.")
+        
+        with st.expander("👤 Quinto Uomo - Secondo Tempo", expanded=False):
+            if report_quinto_uomo['2T']:
+                df_quinto_2t = pd.DataFrame([report_quinto_uomo['2T']]).T
+                df_quinto_2t = format_column_names(df_quinto_2t)
+                df_quinto_2t = format_index_names(df_quinto_2t)
+                st.dataframe(df_quinto_2t, use_container_width=True)
+            else:
+                st.info("Nessuna situazione con quinto uomo trovata nel secondo tempo.")
 
-# === TAB 4: Zone ===
-with tabs[3]:
+# === TAB Zone ===
+with tabs[tab_names.index("Zone")]:
     st.header("Analisi per zone di campo aggregate")
     campo = FutsalPitch()
     report_zona = calcola_report_zona(df_all)
@@ -747,96 +758,99 @@ with tabs[3]:
             else:
                 st.info("Nessun dato di difesa disponibile.")
 
-    with st.expander("👤 Analisi Zone Individuali", expanded=False):
-        st.subheader("Statistiche individuali per zona")
-        per_side_player = st.checkbox("Mostra split per lato (Sx/Dx) – giocatore", value=True, key="zona_player_per_side")
-        giocatori = sorted({
-            g for zona in report_zona['individuali'].values()
-            for g in zona.keys() if g.strip()
-        })
+    # Per u15/u17 non mostriamo l'analisi zonale individuale (non abbiamo dati dei singoli giocatori)
+    if categoria_attiva.lower() not in ['u15', 'u17']:
+        with st.expander("👤 Analisi Zone Individuali", expanded=False):
+            st.subheader("Statistiche individuali per zona")
+            per_side_player = st.checkbox("Mostra split per lato (Sx/Dx) – giocatore", value=True, key="zona_player_per_side")
+            giocatori = sorted({
+                g for zona in report_zona['individuali'].values()
+                for g in zona.keys() if g.strip()
+            })
+            
+            if giocatori:
+                giocatore_scelto = st.selectbox("Scegli giocatore", giocatori, key="zona_giocatore")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown(f"#### Attacco – {giocatore_scelto}")
+                    metriche_attacco_gioc = []
+                    for zona in report_zona['individuali'].values():
+                        if giocatore_scelto in zona:
+                            metriche_attacco_gioc = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'palle_perse']
+                            break
+
+                    stat_keys_att_gioc_sel = st.multiselect(
+                        "Statistiche attacco (giocatore)",
+                        metriche_attacco_gioc,
+                        default=metriche_attacco_gioc[:3],
+                        key="zona_stats_attacco_gioc"
+                    )
+
+                    if stat_keys_att_gioc_sel:
+                        fig, ax = draw_player_metric_per_zone(
+                            report_zona['individuali'], campo, stat_keys_att_gioc_sel,
+                            chi=giocatore_scelto,
+                            title=f"Attacco per zona – {giocatore_scelto}",
+                            cmap=cm.OrRd,
+                            per_side=per_side_player
+                        )
+                        st.pyplot(fig)
+
+                with col2:
+                    st.markdown(f"#### Difesa – {giocatore_scelto}")
+                    metriche_difesa_gioc = []
+                    for zona in report_zona['individuali'].values():
+                        if giocatore_scelto in zona:
+                            metriche_difesa_gioc = ['tiri_ribattuti_noi', 'palle_recuperate', 'falli_subiti']
+                            break
+
+                    stat_keys_dif_gioc_sel = st.multiselect(
+                        "Statistiche difesa (giocatore)",
+                        metriche_difesa_gioc,
+                        default=metriche_difesa_gioc[:3],
+                        key="zona_stats_difesa_gioc"
+                    )
+
+                    if stat_keys_dif_gioc_sel:
+                        fig, ax = draw_player_metric_per_zone(
+                            report_zona['individuali'], campo, stat_keys_dif_gioc_sel,
+                            chi=giocatore_scelto,
+                            title=f"Difesa per zona – {giocatore_scelto}",
+                            cmap=cm.BuPu,
+                            per_side=per_side_player
+                        )
+                        st.pyplot(fig)
+            else:
+                st.info("Nessun giocatore trovato.")
+
+# === TAB Minutaggi ===
+if "Minutaggi" in tab_names:
+    with tabs[tab_names.index("Minutaggi")]:
+        st.header("Minutaggi aggregati")
         
-        if giocatori:
-            giocatore_scelto = st.selectbox("Scegli giocatore", giocatori, key="zona_giocatore")
+        # I minutaggi sono già stati calcolati prima dei tabs (variabile `minutaggi`)
 
-            col1, col2 = st.columns(2)
+        categorie_viste = [
+            ("mov4_portieri", "Portieri"),
+            ("mov4_singoli", "Singoli"),
+            # ("mov4_coppie", "Coppie di movimento"),  # COMMENTATO - mantenere solo singoli e quartetti
+            ("mov4_quartetto", "Quartetto"),
+            ("mov5_senza_portiere", "Quinto uomo (5 giocatori di movimento)")
+        ]
 
-            with col1:
-                st.markdown(f"#### Attacco – {giocatore_scelto}")
-                metriche_attacco_gioc = []
-                for zona in report_zona['individuali'].values():
-                    if giocatore_scelto in zona:
-                        metriche_attacco_gioc = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'palle_perse']
-                        break
+        label_to_title = {
+            "totale": "Totale",
+            "primo_tempo": "Primo tempo",
+            "secondo_tempo": "Secondo tempo",
+        }
 
-                stat_keys_att_gioc_sel = st.multiselect(
-                    "Statistiche attacco (giocatore)",
-                    metriche_attacco_gioc,
-                    default=metriche_attacco_gioc[:3],
-                    key="zona_stats_attacco_gioc"
-                )
-
-                if stat_keys_att_gioc_sel:
-                    fig, ax = draw_player_metric_per_zone(
-                        report_zona['individuali'], campo, stat_keys_att_gioc_sel,
-                        chi=giocatore_scelto,
-                        title=f"Attacco per zona – {giocatore_scelto}",
-                        cmap=cm.OrRd,
-                        per_side=per_side_player
-                    )
-                    st.pyplot(fig)
-
-            with col2:
-                st.markdown(f"#### Difesa – {giocatore_scelto}")
-                metriche_difesa_gioc = []
-                for zona in report_zona['individuali'].values():
-                    if giocatore_scelto in zona:
-                        metriche_difesa_gioc = ['tiri_ribattuti_noi', 'palle_recuperate', 'falli_subiti']
-                        break
-
-                stat_keys_dif_gioc_sel = st.multiselect(
-                    "Statistiche difesa (giocatore)",
-                    metriche_difesa_gioc,
-                    default=metriche_difesa_gioc[:3],
-                    key="zona_stats_difesa_gioc"
-                )
-
-                if stat_keys_dif_gioc_sel:
-                    fig, ax = draw_player_metric_per_zone(
-                        report_zona['individuali'], campo, stat_keys_dif_gioc_sel,
-                        chi=giocatore_scelto,
-                        title=f"Difesa per zona – {giocatore_scelto}",
-                        cmap=cm.BuPu,
-                        per_side=per_side_player
-                    )
-                    st.pyplot(fig)
-        else:
-            st.info("Nessun giocatore trovato.")
-
-# === TAB 5: Minutaggi ===
-with tabs[4]:
-    st.header("Minutaggi aggregati")
-    
-    # I minutaggi sono già stati calcolati prima dei tabs (variabile `minutaggi`)
-
-    categorie_viste = [
-        ("mov4_portieri", "Portieri"),
-        ("mov4_singoli", "Singoli"),
-        # ("mov4_coppie", "Coppie di movimento"),  # COMMENTATO - mantenere solo singoli e quartetti
-        ("mov4_quartetto", "Quartetto"),
-        ("mov5_senza_portiere", "Quinto uomo (5 giocatori di movimento)")
-    ]
-
-    label_to_title = {
-        "totale": "Totale",
-        "primo_tempo": "Primo tempo",
-        "secondo_tempo": "Secondo tempo",
-    }
-
-    for periodo, categorie in minutaggi.items():
-        with st.expander(label_to_title.get(periodo, periodo).upper(), expanded=False):
-            for key_cat, titolo in categorie_viste:
-                if key_cat in categorie and not categorie[key_cat].empty:
-                    st.markdown(f"**{titolo}**")
-                    df_minutaggi = categorie[key_cat].copy()
-                    df_minutaggi = format_column_names(df_minutaggi)
-                    st.dataframe(df_minutaggi)
+        for periodo, categorie in minutaggi.items():
+            with st.expander(label_to_title.get(periodo, periodo).upper(), expanded=False):
+                for key_cat, titolo in categorie_viste:
+                    if key_cat in categorie and not categorie[key_cat].empty:
+                        st.markdown(f"**{titolo}**")
+                        df_minutaggi = categorie[key_cat].copy()
+                        df_minutaggi = format_column_names(df_minutaggi)
+                        st.dataframe(df_minutaggi)
