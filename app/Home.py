@@ -81,8 +81,20 @@ categoria_scelta = st.selectbox(
     key="categoria_selectbox"
 )
 
-# Aggiorna la categoria in session_state
-st.session_state['categoria_selezionata'] = categoria_scelta
+# Controlla se la categoria è cambiata
+categoria_precedente = st.session_state.get('categoria_selezionata')
+if categoria_scelta != categoria_precedente:
+    # Reset della cache quando cambia categoria
+    st.cache_data.clear()
+    # Reset delle variabili di sessione che potrebbero contenere dati della categoria precedente
+    if 'partita_scelta' in st.session_state:
+        del st.session_state['partita_scelta']
+    # Aggiorna la categoria
+    st.session_state['categoria_selezionata'] = categoria_scelta
+    st.rerun()
+else:
+    # Aggiorna la categoria in session_state
+    st.session_state['categoria_selezionata'] = categoria_scelta
 
 # st.markdown(f"### Panoramica Stagione - Campionato ({categoria_scelta})")
 

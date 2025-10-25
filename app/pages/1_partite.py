@@ -67,6 +67,16 @@ if "partita_scelta" not in st.session_state:
 
 partita_id = st.session_state["partita_scelta"]
 partita_info = next((p for p in partite if p["id"] == partita_id), None)
+
+# Controlla se la partita selezionata esiste ancora nella categoria corrente
+if partita_info is None:
+    st.error("⚠️ La partita selezionata non è più disponibile per la categoria corrente.")
+    st.info("💡 Prova a selezionare una partita diversa o cambia categoria dalla Homepage.")
+    # Rimuovi la partita selezionata dalla session_state
+    if 'partita_scelta' in st.session_state:
+        del st.session_state['partita_scelta']
+    st.stop()
+
 st.markdown("---")
 # st.subheader(f"Analisi di {partita_info['competizione'].capitalize()} vs {partita_info['avversario'].title()} — {partita_info['data']}")
 
