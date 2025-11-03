@@ -107,33 +107,15 @@ if not partite_campionato:
     # st.info("Usa il menu a sinistra per navigare nell'applicazione 👈")
     st.stop()
 
-# --- Carica eventi con paginazione (Supabase ha limite di 1000 righe) ---
+# --- Carica eventi: una query per ogni partita ---
 partite_ids = [p['id'] for p in partite_campionato]
 eventi_totali = []
 
-# Carica eventi dividendo le partite in chunk per evitare limiti di query
-chunk_size = 50  # Numero di partite per chunk
-for i in range(0, len(partite_ids), chunk_size):
-    chunk_ids = partite_ids[i:i + chunk_size]
-    
-    # Per ogni chunk di partite, carica tutti gli eventi con paginazione
-    page_size = 1000
-    offset = 0
-    
-    while True:
-        eventi_res = supabase.table("eventi").select("*", count="exact").in_("partita_id", chunk_ids).order("partita_id, posizione").range(offset, offset + page_size - 1).execute()
-        
-        batch = eventi_res.data
-        if not batch:
-            break
-        
-        eventi_totali.extend(batch)
-        
-        # Se abbiamo ricevuto meno di page_size, abbiamo finito questo chunk
-        if len(batch) < page_size:
-            break
-        
-        offset += page_size
+with st.spinner("Caricamento eventi in corso..."):
+    for partita_id in partite_ids:
+        eventi_res = supabase.table("eventi").select("*").eq("partita_id", partita_id).order("posizione").execute()
+        if eventi_res.data:
+            eventi_totali.extend(eventi_res.data)
 
 print(f"[DEBUG] Totale eventi caricati: {len(eventi_totali)}")
 st.info(f"📊 Totale eventi caricati: {len(eventi_totali)}")
