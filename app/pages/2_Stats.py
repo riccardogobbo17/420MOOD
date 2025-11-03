@@ -720,7 +720,7 @@ with tabs[tab_names.index("Zone")]:
             zone_attacco = report_zona['squadra']['attacco']
             if zone_attacco:
                 first_zone = next(iter(zone_attacco.values()))
-                metriche_attacco = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'laterali']
+                metriche_attacco = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'laterali', 'palle_perse']
                 stat_keys_att_sel = st.multiselect(
                     "Statistiche attacco (squadra)",
                     metriche_attacco,
@@ -744,7 +744,7 @@ with tabs[tab_names.index("Zone")]:
             zone_difesa = report_zona['squadra']['difesa']
             if zone_difesa:
                 first_zone = next(iter(zone_difesa.values()))
-                metriche_difesa = ['gol_subiti', 'tiri_totali_subiti', 'tiri_in_porta_totali_subiti', 'tiri_ribattuti_da_noi', 'tiri_fuori_loro', 'palo_traversa_loro', 'laterale_loro']
+                metriche_difesa = ['gol_subiti', 'tiri_totali_subiti', 'tiri_in_porta_totali_subiti', 'tiri_ribattuti_da_noi', 'tiri_fuori_loro', 'palo_traversa_loro', 'laterale_loro', 'palle_recuperate']
                 stat_keys_dif_sel = st.multiselect(
                     "Statistiche difesa (squadra)",
                     metriche_difesa,
