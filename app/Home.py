@@ -128,6 +128,9 @@ while True:
     
     offset += page_size
 
+print(f"[DEBUG] Totale eventi caricati: {len(eventi_totali)}")
+st.info(f"📊 Totale eventi caricati: {len(eventi_totali)}")
+
 if not eventi_totali:
     st.warning("Nessun evento trovato per le partite di campionato.")
     st.stop()
