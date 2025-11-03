@@ -91,10 +91,26 @@ if not partite_filtrate:
 # --- Carica eventi per tutte le partite filtrate ---
 st.info(f"Caricamento dati per {len(partite_filtrate)} partite della competizione '{competizione_scelta}'...")
 
-# Raggruppa eventi per partita_id
+# Raggruppa eventi per partita_id con paginazione (Supabase ha limite di 1000 righe)
 partite_ids = [p['id'] for p in partite_filtrate]
-eventi_res = supabase.table("eventi").select("*").in_("partita_id", partite_ids).order("partita_id, posizione").execute()
-eventi_totali = eventi_res.data
+eventi_totali = []
+page_size = 1000
+offset = 0
+
+while True:
+    eventi_res = supabase.table("eventi").select("*", count="exact").in_("partita_id", partite_ids).order("partita_id, posizione").range(offset, offset + page_size - 1).execute()
+    
+    batch = eventi_res.data
+    if not batch:
+        break
+    
+    eventi_totali.extend(batch)
+    
+    # Se abbiamo ricevuto meno di page_size, abbiamo finito
+    if len(batch) < page_size:
+        break
+    
+    offset += page_size
 
 if not eventi_totali:
     st.warning("Nessun evento trovato per le partite selezionate.")
