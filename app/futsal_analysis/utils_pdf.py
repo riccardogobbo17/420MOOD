@@ -220,9 +220,9 @@ def generate_pdf_report(
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             # Font dell'intestazione di tabella (riga 0).
-            ("FONTSIZE", (0, 0), (-1, 0), 5.5),
+            ("FONTSIZE", (0, 0), (-1, 0), 7),
             # Font delle celle di dati (righe > 0).
-            ("FONTSIZE", (0, 1), (-1, -1), 4.5),
+            ("FONTSIZE", (0, 1), (-1, -1), 6),
             ("TOPPADDING", (0, 0), (-1, 0), 0.8),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 0.8),
             ("TOPPADDING", (0, 1), (-1, -1), 0.4),
