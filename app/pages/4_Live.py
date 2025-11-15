@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+
 from futsal_analysis.config_supabase import get_supabase_client
-from futsal_analysis.utils_eventi import calcola_palle_recuperate_perse, calcola_attacco, calcola_difesa, calcola_report_completo
+from futsal_analysis.utils_eventi import (
+    calcola_palle_recuperate_perse,
+    calcola_attacco,
+    calcola_difesa,
+    calcola_report_completo,
+)
+from futsal_analysis.utils_pdf import PdfTableSection, generate_pdf_report
 
 # Page configuration
 st.set_page_config(
@@ -80,6 +88,8 @@ def main():
         report_eventi = calcola_report_completo(df)
         
         # Helper functions for formatting (same as Partite page)
+        pdf_table_sections = []
+
         def format_column_names(df):
             """Formatta i nomi delle colonne rimuovendo underscore e capitalizzando"""
             new_columns = {}
@@ -98,7 +108,7 @@ def main():
                     new_index[idx] = formatted
             return df.rename(index=new_index)
 
-        def render_section(title, data_dict, show_title=True):
+        def render_section(title, data_dict, show_title=True, pdf_section_title=None):
             if show_title:
                 st.markdown(f"**{title}**")
             try:
@@ -112,13 +122,18 @@ def main():
             
             st.dataframe(df_sec, use_container_width=True)
 
+            if pdf_section_title:
+                pdf_table_sections.append(PdfTableSection(pdf_section_title, df_sec.copy()))
+
+            return df_sec
+
         # Sezione Possesso
         with st.expander("⚽ Possesso", expanded=False):
-            render_section("Attacco", report_eventi['squadra']['attacco'], show_title=False)
+            render_section("Attacco", report_eventi['squadra']['attacco'], show_title=False, pdf_section_title="Possesso - Attacco")
         
         # Sezione Non Possesso
         with st.expander("🛡️ Non Possesso", expanded=False):
-            render_section("Difesa", report_eventi['squadra']['difesa'], show_title=False)
+            render_section("Difesa", report_eventi['squadra']['difesa'], show_title=False, pdf_section_title="Non Possesso - Difesa")
         
         # Sezione Perse/Recuperate
         with st.expander("🔄 Perse/Recuperate", expanded=False):
@@ -148,22 +163,29 @@ def main():
                     'ripartenze_loro': ripartenze_loro
                 }
             
-            render_section("Perse/Recuperate", palle_stats, show_title=False)
+            render_section("Perse/Recuperate", palle_stats, show_title=False, pdf_section_title="Perse e Recuperate")
         
         # Sezione Falli
         with st.expander("⚠️ Falli", expanded=False):
-            render_section("Falli", report_eventi['squadra']['falli'], show_title=False)
-        
-        # Sezione Portieri
-        with st.expander("🥅 Portieri", expanded=False):
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                render_section("Noi", report_eventi['squadra']['portieri_noi'])
-            with col_p2:
-                render_section("Loro", report_eventi['squadra']['portieri_loro'])
+            render_section("Falli", report_eventi['squadra']['falli'], show_title=False, pdf_section_title="Falli")
+
+        if pdf_table_sections:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            pdf_bytes = generate_pdf_report(
+                f"Report Live {timestamp}",
+                table_sections=pdf_table_sections,
+            )
+
+            st.download_button(
+                "📄 Esporta PDF",
+                data=pdf_bytes,
+                file_name=f"live_report_{file_timestamp}.pdf",
+                mime="application/pdf",
+            )
     
     else:
-        st.error("❌ No live data available. Please check your connection and try again.")
+        st.error("❌ No live data available.")
 
 if __name__ == "__main__":
     main()

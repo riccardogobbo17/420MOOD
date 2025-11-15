@@ -1,10 +1,24 @@
 import numpy as np
 import pandas as pd
 
+
+def _prepare_single_match(df_single):
+    """Restituisce una copia del dataframe con l'indice originale preservato."""
+    df_local = df_single.reset_index(drop=False).rename(columns={'index': '__orig_index'})
+    return df_local
+
+
+def _find_event_index(df_local, event_name):
+    """Restituisce il primo indice dell'evento specificato, se presente."""
+    idx_list = df_local[df_local['evento'] == event_name].index.tolist()
+    return idx_list[0] if idx_list else None
+
+
 def to_seconds(time_str):
-    if pd.isna(time_str): return np.nan
+    if pd.isna(time_str):
+        return np.nan
     t = time_str.split(':')
-    return int(t[0])*3600 + int(t[1])*60 + float(t[2]) if len(t) == 3 else np.nan
+    return int(t[0]) * 3600 + int(t[1]) * 60 + float(t[2]) if len(t) == 3 else np.nan
 
 def format_mmss(seconds):
     if pd.isna(seconds): return ''
@@ -52,72 +66,168 @@ def differenza_tempi(t1, t2, format=''):
     total = int((td2 - td1).total_seconds())
     return f"{total//60:02}:{total%60:02}"
 
-def calcola_tempo_effettivo(df):
-    df = df.copy()
-    df['Posizione_sec'] = df['posizione'].apply(to_seconds)
-    idx_start = 0
-    idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
-    idx_start_secondo = idx_fine_primo + 1
-    idx_fine_partita = df[df['evento'] == 'Fine partita'].index[0]
+def _calcola_tempo_effettivo_single(df_single):
+    df_local = _prepare_single_match(df_single)
 
-    t_start = df.loc[idx_start, 'Posizione_sec']
-    t_fine_primo = df.loc[idx_fine_primo, 'Posizione_sec']
-    t_start_secondo = df.loc[idx_start_secondo, 'Posizione_sec']
-    t_fine_partita = df.loc[idx_fine_partita, 'Posizione_sec']
+    if df_local.empty:
+        return pd.Series([], index=df_local['__orig_index'])
 
-    tempo_effettivo = []
-    for i, row in df.iterrows():
+    df_local['Posizione_sec'] = df_local['posizione'].apply(to_seconds)
+
+    idx_fine_primo = _find_event_index(df_local, 'Fine primo tempo')
+    if idx_fine_primo is None:
+        # Se non troviamo il fine primo tempo, restituiamo valori vuoti per evitare crash
+        valori = ['' for _ in range(len(df_local))]
+        return pd.Series(valori, index=df_local['__orig_index'])
+
+    idx_start_secondo = _find_event_index(df_local, 'Inizio secondo tempo')
+    if idx_start_secondo is None or idx_start_secondo <= idx_fine_primo:
+        idx_start_secondo = idx_fine_primo + 1 if idx_fine_primo + 1 < len(df_local) else len(df_local)
+
+    idx_fine_partita = _find_event_index(df_local, 'Fine partita')
+    if idx_fine_partita is None:
+        idx_fine_partita = len(df_local) - 1
+
+    t_start = df_local.loc[0, 'Posizione_sec']
+    t_fine_primo = df_local.loc[idx_fine_primo, 'Posizione_sec']
+    t_start_secondo = df_local.loc[idx_start_secondo, 'Posizione_sec'] if idx_start_secondo < len(df_local) else df_local.loc[idx_fine_primo, 'Posizione_sec']
+    t_fine_partita = df_local.loc[idx_fine_partita, 'Posizione_sec']
+
+    tempo_effettivo_sec = []
+    tempo_effettivo_fmt = []
+
+    for i, row in df_local.iterrows():
         t = row['Posizione_sec']
         if i <= idx_fine_primo:
-            # Primo tempo: da 0 a 20 minuti
-            perc = (t - t_start) / (t_fine_primo - t_start)
-            # Limita la percentuale tra 0 e 1 per evitare tempi impossibili
-            perc = max(0, min(1, perc))
-            eff = perc * 20 * 60
-        elif i >= idx_start_secondo:
-            # Secondo tempo: da 20 a 40 minuti
-            perc = (t - t_start_secondo) / (t_fine_partita - t_start_secondo)
-            # Limita la percentuale tra 0 e 1 per evitare tempi impossibili
-            perc = max(0, min(1, perc))
-            eff = 20 * 60 + perc * 20 * 60
+            denom = t_fine_primo - t_start
+            if denom <= 0 or pd.isna(denom):
+                eff = 0.0
+            else:
+                perc = (t - t_start) / denom
+                perc = max(0, min(1, perc))
+                eff = perc * 20 * 60
+        elif idx_start_secondo < len(df_local) and i >= idx_start_secondo:
+            denom = t_fine_partita - t_start_secondo
+            if denom <= 0 or pd.isna(denom):
+                eff = 20 * 60
+            else:
+                perc = (t - t_start_secondo) / denom
+                perc = max(0, min(1, perc))
+                eff = 20 * 60 + perc * 20 * 60
         else:
-            # Intervallo
             eff = np.nan
-        tempo_effettivo.append(eff)
 
-    df['tempoEffettivo_sec'] = tempo_effettivo
-    df['tempoEffettivo'] = df['tempoEffettivo_sec'].apply(format_mmss)
-    return df['tempoEffettivo']
+        tempo_effettivo_sec.append(eff)
+        tempo_effettivo_fmt.append('' if pd.isna(eff) else format_mmss(eff))
 
-def calcola_tempo_reale(df):
-    idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
-    idx_start_secondo = idx_fine_primo + 1
-    t_start = df.loc[0, 'posizione']
-    t_start_secondo = df.loc[idx_start_secondo, 'posizione']
+    return pd.Series(tempo_effettivo_fmt, index=df_local['__orig_index'])
+
+
+def calcola_tempo_effettivo(df):
+    if df.empty:
+        return pd.Series([], index=df.index)
+
+    if 'partita_id' not in df.columns or df['partita_id'].nunique() <= 1:
+        result = _calcola_tempo_effettivo_single(df)
+        return result.reindex(df.index)
+
+    series_parts = []
+    for _, gruppo in df.groupby('partita_id', sort=False):
+        series_parts.append(_calcola_tempo_effettivo_single(gruppo))
+
+    combined = pd.concat(series_parts).sort_index()
+    return combined.reindex(df.index)
+
+
+def _calcola_tempo_reale_single(df_single):
+    df_local = _prepare_single_match(df_single)
+
+    if df_local.empty:
+        return pd.Series([], index=df_local['__orig_index'])
+
+    idx_fine_primo = _find_event_index(df_local, 'Fine primo tempo')
+    if idx_fine_primo is None:
+        t_start = df_local.loc[0, 'posizione']
+        tempi = [differenza_tempi(t_start, row['posizione']) for _, row in df_local.iterrows()]
+        return pd.Series(tempi, index=df_local['__orig_index'])
+
+    idx_start_secondo = _find_event_index(df_local, 'Inizio secondo tempo')
+    if idx_start_secondo is None or idx_start_secondo <= idx_fine_primo:
+        idx_start_secondo = idx_fine_primo + 1 if idx_fine_primo + 1 < len(df_local) else len(df_local)
+
+    t_start = df_local.loc[0, 'posizione']
+    t_start_secondo = df_local.loc[idx_start_secondo, 'posizione'] if idx_start_secondo < len(df_local) else df_local.loc[idx_fine_primo, 'posizione']
 
     tempi_reali = []
-    for i, row in df.iterrows():
+    for i, row in df_local.iterrows():
         if i <= idx_fine_primo:
             tempo = differenza_tempi(t_start, row['posizione'])
-        elif i >= idx_start_secondo:
+        elif idx_start_secondo < len(df_local) and i >= idx_start_secondo:
             tempo = differenza_tempi(t_start_secondo, row['posizione'])
         else:
             tempo = ''
         tempi_reali.append(tempo)
-    return tempi_reali
+
+    return pd.Series(tempi_reali, index=df_local['__orig_index'])
+
+
+def calcola_tempo_reale(df):
+    if df.empty:
+        return pd.Series([], index=df.index)
+
+    if 'partita_id' not in df.columns or df['partita_id'].nunique() <= 1:
+        result = _calcola_tempo_reale_single(df)
+        return result.reindex(df.index).tolist()
+
+    series_parts = []
+    for _, gruppo in df.groupby('partita_id', sort=False):
+        series_parts.append(_calcola_tempo_reale_single(gruppo))
+
+    combined = pd.concat(series_parts).sort_index()
+    return combined.reindex(df.index).tolist()
+
+
+def _tag_primo_secondo_single(df_single):
+    df_local = _prepare_single_match(df_single)
+
+    if df_local.empty:
+        return pd.Series([], index=df_local['__orig_index'])
+
+    idx_fine_primo = _find_event_index(df_local, 'Fine primo tempo')
+    if idx_fine_primo is None:
+        valori = ['Primo tempo' for _ in range(len(df_local))]
+        return pd.Series(valori, index=df_local['__orig_index'])
+
+    idx_start_secondo = _find_event_index(df_local, 'Inizio secondo tempo')
+    if idx_start_secondo is None or idx_start_secondo <= idx_fine_primo:
+        idx_start_secondo = idx_fine_primo + 1 if idx_fine_primo + 1 < len(df_local) else len(df_local)
+
+    periodo = []
+    for i in range(len(df_local)):
+        if i <= idx_fine_primo:
+            periodo.append("Primo tempo")
+        elif idx_start_secondo < len(df_local) and i >= idx_start_secondo:
+            periodo.append("Secondo tempo")
+        else:
+            periodo.append("Intervallo")
+
+    return pd.Series(periodo, index=df_local['__orig_index'])
+
 
 def tag_primo_secondo_tempo(df):
-    idx_fine_primo = df[df['evento'] == 'Fine primo tempo'].index[0]
-    idx_start_secondo = idx_fine_primo + 1
-    tempo_periodo = []
-    for i in df.index:
-        if i <= idx_fine_primo:
-            tempo_periodo.append("Primo tempo")
-        elif i >= idx_start_secondo:
-            tempo_periodo.append("Secondo tempo")
-        else:
-            tempo_periodo.append("Intervallo")
-    return tempo_periodo
+    if len(df) == 0:
+        return []
+
+    if 'partita_id' not in df.columns or df['partita_id'].nunique() <= 1:
+        serie = _tag_primo_secondo_single(df)
+        return serie.reindex(df.index).tolist()
+
+    series_parts = []
+    for _, gruppo in df.groupby('partita_id', sort=False):
+        series_parts.append(_tag_primo_secondo_single(gruppo))
+
+    combined = pd.concat(series_parts).sort_index()
+    return combined.reindex(df.index).tolist()
 
 def filtra_per_tempo(df, periodo):
     if periodo == 'Primo tempo':

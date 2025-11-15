@@ -137,9 +137,19 @@ def format_index_names(df):
     """Formatta i nomi delle righe rimuovendo underscore e capitalizzando"""
     new_index = {}
     for idx in df.index:
-        if isinstance(idx, str):
-            formatted = idx.replace('_', ' ').title()
+        if isinstance(idx, tuple):
+            formatted = tuple(part.replace('_', ' ').title() for part in idx)
             new_index[idx] = formatted
+        elif isinstance(idx, str):
+            if ';' in idx:
+                parts = [p.strip().replace('_', ' ').title() for p in idx.split(';')]
+                formatted = tuple(parts)
+                new_index[idx] = formatted
+            else:
+                formatted = idx.replace('_', ' ').title()
+                new_index[idx] = formatted
+        else:
+            new_index[idx] = str(idx)
     return df.rename(index=new_index)
 
 def render_section(title, data_dict, show_title=True):
@@ -679,7 +689,7 @@ if "Stats Quartetti" in tab_names:
         
         with st.expander("👤 Quinto Uomo - Totale", expanded=False):
             if report_quinto_uomo['Totale']:
-                df_quinto_tot = pd.DataFrame([report_quinto_uomo['Totale']]).T
+                df_quinto_tot = pd.DataFrame(report_quinto_uomo['Totale']).T
                 df_quinto_tot = format_column_names(df_quinto_tot)
                 df_quinto_tot = format_index_names(df_quinto_tot)
                 st.dataframe(df_quinto_tot, use_container_width=True)
@@ -688,7 +698,7 @@ if "Stats Quartetti" in tab_names:
         
         with st.expander("👤 Quinto Uomo - Primo Tempo", expanded=False):
             if report_quinto_uomo['1T']:
-                df_quinto_1t = pd.DataFrame([report_quinto_uomo['1T']]).T
+                df_quinto_1t = pd.DataFrame(report_quinto_uomo['1T']).T
                 df_quinto_1t = format_column_names(df_quinto_1t)
                 df_quinto_1t = format_index_names(df_quinto_1t)
                 st.dataframe(df_quinto_1t, use_container_width=True)
@@ -697,7 +707,7 @@ if "Stats Quartetti" in tab_names:
         
         with st.expander("👤 Quinto Uomo - Secondo Tempo", expanded=False):
             if report_quinto_uomo['2T']:
-                df_quinto_2t = pd.DataFrame([report_quinto_uomo['2T']]).T
+                df_quinto_2t = pd.DataFrame(report_quinto_uomo['2T']).T
                 df_quinto_2t = format_column_names(df_quinto_2t)
                 df_quinto_2t = format_index_names(df_quinto_2t)
                 st.dataframe(df_quinto_2t, use_container_width=True)

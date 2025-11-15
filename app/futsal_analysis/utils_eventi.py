@@ -332,20 +332,25 @@ def calcola_stats_quartetti(df):
     def get_quartetto(row):
         # Prendi i 4 giocatori di movimento (escludi portiere)
         giocatori = []
+        player_cols_supabase = ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3', 'quartetto_4']
+        player_cols_csv = ['quartetto', 'quartetto.1', 'quartetto.2', 'quartetto.3', 'quartetto.4']
+
         # Prova prima i nomi delle colonne del database Supabase
-        for col in ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3']:
+        for col in player_cols_supabase:
             if col in row and pd.notna(row[col]) and str(row[col]).strip():
                 giocatori.append(str(row[col]).strip())
-        
+
         # Se non troviamo giocatori, prova i nomi delle colonne normalizzate dal CSV
         if not giocatori:
-            for col in ['quartetto', 'quartetto.1', 'quartetto.2', 'quartetto.3']:
+            for col in player_cols_csv:
                 if col in row and pd.notna(row[col]) and str(row[col]).strip():
                     giocatori.append(str(row[col]).strip())
-        
+
+        giocatori_unici = sorted({g for g in giocatori if g})
+
         # Se abbiamo esattamente 4 giocatori, crea il quartetto
-        if len(giocatori) == 4:
-            return ';'.join(sorted(giocatori))
+        if len(giocatori_unici) == 4:
+            return ';'.join(giocatori_unici)
         return None
     
     # Applica la funzione per creare la colonna quartetto
@@ -410,79 +415,88 @@ def calcola_stats_quartetti(df):
 def calcola_stats_quinto_uomo(df):
     """
     Calcola le statistiche per le situazioni con 5 giocatori di movimento (quinto uomo).
+    Raggruppa le statistiche per ciascun quintetto di giocatori di movimento.
     """
-    # Filtra solo le righe con 5 giocatori di movimento
     df_quinto = df.copy()
-    
-    def is_quinto_uomo(row):
-        # Conta i giocatori di movimento (escludi portiere)
+
+    def get_quintetto(row):
+        # Escludi le situazioni con portiere in campo
+        portiere = row.get('portiere')
+        if pd.notna(portiere) and str(portiere).strip():
+            return None
+
         giocatori = []
-        # Prova prima i nomi delle colonne del database Supabase
-        for col in ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3']:
+        player_cols_supabase = ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3', 'quartetto_4']
+        player_cols_csv = ['quartetto', 'quartetto.1', 'quartetto.2', 'quartetto.3', 'quartetto.4']
+
+        for col in player_cols_supabase:
             if col in row and pd.notna(row[col]) and str(row[col]).strip():
                 giocatori.append(str(row[col]).strip())
-        
-        # Se non troviamo giocatori, prova i nomi delle colonne normalizzate dal CSV
+
         if not giocatori:
-            for col in ['quartetto', 'quartetto.1', 'quartetto.2', 'quartetto.3']:
+            for col in player_cols_csv:
                 if col in row and pd.notna(row[col]) and str(row[col]).strip():
                     giocatori.append(str(row[col]).strip())
-        
-        # Se abbiamo 5 giocatori, è quinto uomo
-        return len(giocatori) == 5
-    
-    # Applica la funzione per identificare quinto uomo
-    df_quinto['is_quinto_uomo'] = df_quinto.apply(is_quinto_uomo, axis=1)
-    
-    # Filtra solo le righe con quinto uomo
-    df_quinto = df_quinto[df_quinto['is_quinto_uomo']]
-    
+
+        giocatori_unici = sorted({g for g in giocatori if g})
+
+        if len(giocatori_unici) == 5:
+            return ';'.join(giocatori_unici)
+        return None
+
+    df_quinto['quintetto_id'] = df_quinto.apply(get_quintetto, axis=1)
+    df_quinto = df_quinto[df_quinto['quintetto_id'].notna()]
+
     if df_quinto.empty:
         return {}
-    
-    # Calcola le statistiche per quinto uomo
-    stats = {}
-    
-    # GOL
-    stats['gol_fatti'] = len(df_quinto[(df_quinto['evento'].str.contains('Gol', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    stats['gol_subiti'] = len(df_quinto[(df_quinto['evento'].str.contains('Gol', na=False)) & (df_quinto['squadra'] == 'Loro')])
-    
-    # ATTACCO
-    mask_tiro = (df_quinto['evento'].str.contains('Tiro', na=False)) & (df_quinto['squadra'] == 'Noi')
-    stats['tiri_totali'] = len(df_quinto[mask_tiro])
-    stats['tiri_in_porta'] = len(df_quinto[mask_tiro & df_quinto['esito'].isin(['Parata', 'Gol'])])
-    stats['tiri_fuori'] = len(df_quinto[mask_tiro & (df_quinto['esito'] == 'Fuori')])
-    stats['tiri_ribattuti'] = len(df_quinto[mask_tiro & (df_quinto['esito'] == 'Ribattuto')])
-    stats['palo_traversa'] = len(df_quinto[mask_tiro & (df_quinto['esito'] == 'Palo')])
-    stats['angoli'] = len(df_quinto[(df_quinto['evento'].str.contains('Angolo', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    stats['laterali'] = len(df_quinto[(df_quinto['evento'].str.contains('Laterale', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    
-    # DIFESA
-    mask_tiro_loro = (df_quinto['evento'].str.contains('Tiro', na=False)) & (df_quinto['squadra'] == 'Loro')
-    stats['tiri_subiti'] = len(df_quinto[mask_tiro_loro])
-    stats['tiri_in_porta_subiti'] = len(df_quinto[mask_tiro_loro & df_quinto['esito'].isin(['Parata', 'Gol'])])
-    stats['tiri_fuori_subiti'] = len(df_quinto[mask_tiro_loro & (df_quinto['esito'] == 'Fuori')])
-    stats['tiri_loro_ribattuti_da_noi'] = len(df_quinto[mask_tiro_loro & (df_quinto['esito'] == 'Ribattuto')])
-    stats['angoli_subiti'] = len(df_quinto[(df_quinto['evento'].str.contains('Angolo', na=False)) & (df_quinto['squadra'] == 'Loro')])
-    stats['laterali_subiti'] = len(df_quinto[(df_quinto['evento'].str.contains('Laterale', na=False)) & (df_quinto['squadra'] == 'Loro')])
-    
-    # PALLE PERSE/RECUPERATE
-    stats['palle_perse'] = len(df_quinto[(df_quinto['evento'].str.contains('Palla persa', na=False))])
-    stats['palle_recuperate'] = len(df_quinto[(df_quinto['evento'].str.contains('Palla recuperata', na=False))])
-    
-    # RIPARTENZE
-    stats['ripartenze'] = len(df_quinto[(df_quinto['evento'].str.contains('Ripartenza', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    stats['ripartenze_subite'] = len(df_quinto[(df_quinto['evento'].str.contains('Ripartenza', na=False)) & (df_quinto['squadra'] == 'Loro')])
-    
-    # FALLI
-    mask_falli_noi = (df_quinto['evento'].str.contains('Fallo', na=False)) & (df_quinto['squadra'] == 'Noi')
-    mask_falli_loro = (df_quinto['evento'].str.contains('Fallo', na=False)) & (df_quinto['squadra'] == 'Loro')
-    stats['falli_fatti'] = len(df_quinto[mask_falli_noi])
-    stats['falli_subiti'] = len(df_quinto[mask_falli_loro])
-    stats['ammonizioni'] = len(df_quinto[(df_quinto['evento'].str.contains('Ammonizione', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    stats['espulsioni'] = len(df_quinto[(df_quinto['evento'].str.contains('Espulsione', na=False)) & (df_quinto['squadra'] == 'Noi')])
-    
-    return stats
+
+    stats_quintetti = {}
+
+    for quintetto, gruppo in df_quinto.groupby('quintetto_id'):
+        stats = {}
+
+        # GOL
+        stats['gol_fatti'] = len(gruppo[(gruppo['evento'].str.contains('Gol', na=False)) & (gruppo['squadra'] == 'Noi')])
+        stats['gol_subiti'] = len(gruppo[(gruppo['evento'].str.contains('Gol', na=False)) & (gruppo['squadra'] == 'Loro')])
+
+        # ATTACCO
+        mask_tiro = (gruppo['evento'].str.contains('Tiro', na=False)) & (gruppo['squadra'] == 'Noi')
+        stats['tiri_totali'] = len(gruppo[mask_tiro])
+        stats['tiri_in_porta'] = len(gruppo[mask_tiro & gruppo['esito'].isin(['Parata', 'Gol'])])
+        stats['tiri_fuori'] = len(gruppo[mask_tiro & (gruppo['esito'] == 'Fuori')])
+        stats['tiri_ribattuti'] = len(gruppo[mask_tiro & (gruppo['esito'] == 'Ribattuto')])
+        stats['palo_traversa'] = len(gruppo[mask_tiro & (gruppo['esito'] == 'Palo')])
+        stats['angoli'] = len(gruppo[(gruppo['evento'].str.contains('Angolo', na=False)) & (gruppo['squadra'] == 'Noi')])
+        stats['laterali'] = len(gruppo[(gruppo['evento'].str.contains('Laterale', na=False)) & (gruppo['squadra'] == 'Noi')])
+
+        # DIFESA
+        mask_tiro_loro = (gruppo['evento'].str.contains('Tiro', na=False)) & (gruppo['squadra'] == 'Loro')
+        stats['tiri_subiti'] = len(gruppo[mask_tiro_loro])
+        stats['tiri_in_porta_subiti'] = len(gruppo[mask_tiro_loro & gruppo['esito'].isin(['Parata', 'Gol'])])
+        stats['tiri_fuori_subiti'] = len(gruppo[mask_tiro_loro & (gruppo['esito'] == 'Fuori')])
+        stats['tiri_loro_ribattuti_da_noi'] = len(gruppo[mask_tiro_loro & (gruppo['esito'] == 'Ribattuto')])
+        stats['angoli_subiti'] = len(gruppo[(gruppo['evento'].str.contains('Angolo', na=False)) & (gruppo['squadra'] == 'Loro')])
+        stats['laterali_subiti'] = len(gruppo[(gruppo['evento'].str.contains('Laterale', na=False)) & (gruppo['squadra'] == 'Loro')])
+
+        # PALLE PERSE/RECUPERATE
+        stats['palle_perse'] = len(gruppo[(gruppo['evento'].str.contains('Palla persa', na=False))])
+        stats['palle_recuperate'] = len(gruppo[(gruppo['evento'].str.contains('Palla recuperata', na=False))])
+
+        # RIPARTENZE
+        stats['ripartenze'] = len(gruppo[(gruppo['evento'].str.contains('Ripartenza', na=False)) & (gruppo['squadra'] == 'Noi')])
+        stats['ripartenze_subite'] = len(gruppo[(gruppo['evento'].str.contains('Ripartenza', na=False)) & (gruppo['squadra'] == 'Loro')])
+
+        # FALLI
+        mask_falli_noi = (gruppo['evento'].str.contains('Fallo', na=False)) & (gruppo['squadra'] == 'Noi')
+        mask_falli_loro = (gruppo['evento'].str.contains('Fallo', na=False)) & (gruppo['squadra'] == 'Loro')
+        stats['falli_fatti'] = len(gruppo[mask_falli_noi])
+        stats['falli_subiti'] = len(gruppo[mask_falli_loro])
+        stats['ammonizioni'] = len(gruppo[(gruppo['evento'].str.contains('Ammonizione', na=False)) & (gruppo['squadra'] == 'Noi')])
+        stats['espulsioni'] = len(gruppo[(gruppo['evento'].str.contains('Espulsione', na=False)) & (gruppo['squadra'] == 'Noi')])
+
+        stats_quintetti[quintetto] = stats
+
+    return stats_quintetti
 
 
 def calcola_report_quartetti_completo(df):
