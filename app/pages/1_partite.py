@@ -410,8 +410,9 @@ if "Stats Quartetti" in tab_names:
                 df_quartetti_1t = format_column_names(df_quartetti_1t)
                 df_quartetti_1t = format_index_names(df_quartetti_1t)
                 st.dataframe(df_quartetti_1t, use_container_width=True)
-                if not df_quartetti_1t.empty:
-                    pdf_table_sections.append(PdfTableSection("Stats Quartetti - Primo Tempo", df_quartetti_1t.copy()))
+                # Non aggiungere al PDF - solo Totale per i quartetti
+                # if not df_quartetti_1t.empty:
+                #     pdf_table_sections.append(PdfTableSection("Stats Quartetti - Primo Tempo", df_quartetti_1t.copy()))
             else:
                 st.info("Nessun quartetto trovato nel primo tempo.")
         
@@ -424,8 +425,9 @@ if "Stats Quartetti" in tab_names:
                 df_quartetti_2t = format_column_names(df_quartetti_2t)
                 df_quartetti_2t = format_index_names(df_quartetti_2t)
                 st.dataframe(df_quartetti_2t, use_container_width=True)
-                if not df_quartetti_2t.empty:
-                    pdf_table_sections.append(PdfTableSection("Stats Quartetti - Secondo Tempo", df_quartetti_2t.copy()))
+                # Non aggiungere al PDF - solo Totale per i quartetti
+                # if not df_quartetti_2t.empty:
+                #     pdf_table_sections.append(PdfTableSection("Stats Quartetti - Secondo Tempo", df_quartetti_2t.copy()))
             else:
                 st.info("Nessun quartetto trovato nel secondo tempo.")
         
@@ -662,6 +664,9 @@ if "Minutaggi" in tab_names:
                         df_minutaggi = format_column_names(df_minutaggi)
                         st.dataframe(df_minutaggi)
                         if not df_minutaggi.empty:
+                            # Escludi Minutaggi - Quartetti per Primo tempo e Secondo tempo, mantieni solo Totale
+                            if titolo == "Quartetti" and periodo != "totale":
+                                continue
                             pdf_table_sections.append(PdfTableSection(f"Minutaggi - {titolo} ({label_to_title.get(periodo, periodo)})", df_minutaggi.copy()))
 
 st.markdown("---")
