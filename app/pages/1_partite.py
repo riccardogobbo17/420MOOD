@@ -160,20 +160,22 @@ if not gol_df.empty:
     if not timeline_pdf.empty:
         pdf_table_sections.append(PdfTableSection("Timeline Gol", timeline_pdf.reset_index(drop=True)))
 
+# --- Calcola report eventi (necessario per tutti i tab) ---
+report_eventi = calcola_report_completo(df)
+
 # --- TABS DINAMICI BASATI SULLA CATEGORIA ---
 # Per u15/u17 nascondiamo Stats Individuali, Stats Quartetti e Minutaggi
 if categoria_attiva.lower() in ['u15', 'u17']:
     tabs = st.tabs(["Stats Squadra", "Zone"])
     tab_names = ["Stats Squadra", "Zone"]
 else:
-    tabs = st.tabs(["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
-    tab_names = ["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+    tabs = st.tabs(["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
+    tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
 
 # === TAB 1: Stats Squadra ===
 
 with tabs[0]:
     st.header("Statistiche di squadra")
-    report_eventi = calcola_report_completo(df)
 
     def format_column_names(df):
         """Formatta i nomi delle colonne rimuovendo underscore e capitalizzando"""
@@ -308,9 +310,25 @@ if "Stats Individuali" in tab_names:
     with tabs[tab_names.index("Stats Individuali")]:
         st.header("Statistiche individuali giocatori")
         
+        def reorder_columns_gol(df):
+            """Riordina le colonne per mettere gol_subiti subito dopo gol_fatti"""
+            if df.empty:
+                return df
+            cols = list(df.columns)
+            if 'gol_fatti' in cols and 'gol_subiti' in cols:
+                # Trova l'indice di gol_fatti
+                idx_gol_fatti = cols.index('gol_fatti')
+                # Rimuovi gol_subiti dalla sua posizione attuale
+                cols.remove('gol_subiti')
+                # Inserisci gol_subiti subito dopo gol_fatti
+                cols.insert(idx_gol_fatti + 1, 'gol_subiti')
+                return df[cols]
+            return df
+        
         # Sezione Giocatori con sezioni espandibili
         with st.expander("👥 Giocatori - Totale", expanded=False):
             df_tot = pd.DataFrame(report_eventi['individuali_split']['Totale']).T
+            df_tot = reorder_columns_gol(df_tot)
             df_tot = format_column_names(df_tot)
             df_tot = format_index_names(df_tot)
             st.dataframe(df_tot, use_container_width=True)
@@ -319,6 +337,7 @@ if "Stats Individuali" in tab_names:
         
         with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
             df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
+            df_1t = reorder_columns_gol(df_1t)
             df_1t = format_column_names(df_1t)
             df_1t = format_index_names(df_1t)
             st.dataframe(df_1t, use_container_width=True)
@@ -327,6 +346,7 @@ if "Stats Individuali" in tab_names:
         
         with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
             df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
+            df_2t = reorder_columns_gol(df_2t)
             df_2t = format_column_names(df_2t)
             df_2t = format_index_names(df_2t)
             st.dataframe(df_2t, use_container_width=True)
@@ -359,6 +379,85 @@ if "Stats Individuali" in tab_names:
             st.dataframe(df_port_2t, use_container_width=True)
             if not df_port_2t.empty:
                 pdf_table_sections.append(PdfTableSection("Stats Portieri Individuali - Secondo Tempo", df_port_2t.copy()))
+
+# === TAB 2: Top 5 ===
+if "Top 5" in tab_names:
+    with tabs[tab_names.index("Top 5")]:
+        st.header("🏆 Top 5")
+        
+        # Lista delle statistiche da mostrare (facilmente modificabile)
+        # Formato: (chiave_statistica, 'Nome Visualizzato', è_calcolata)
+        # Se è_calcolata=True, la statistica viene calcolata invece di essere letta direttamente
+        top5_stats = [
+            ('gol_fatti', 'Gol', False),
+            ('tiri_totali', 'Tiri', False),
+            ('tiri_in_porta_totali', 'Tiri in Porta', False),
+            ('precisione_tiri', 'Precisione Tiri (%)', True),  # Calcolata: tiri_in_porta / tiri_totali * 100
+            ('tiri_fuori', 'Tiri Fuori', False),
+            ('tiri_ribattuti', 'Tiri Ribattuti', False),
+            ('palo_traversa', 'Palo/Traversa', False),
+            ('palle_perse', 'Palle Perse', False),
+            ('palle_recuperate', 'Palle Recuperate', False),
+            ('tiri_ribattuti_noi', 'Tiri Ribattuti da Noi', False),
+            ('falli_fatti', 'Falli Fatti', False),
+            ('falli_subiti', 'Falli Subiti', False),
+            # ('ammonizioni', 'Ammonizioni', False),
+            # ('espulsioni', 'Espulsioni', False),
+        ]
+        
+        # Estrai i dati individuali totali
+        stats_individuali = report_eventi['individuali_split']['Totale']
+        
+        # Raccogli tutte le tabelle da visualizzare
+        tabelle_da_mostrare = []
+        
+        # Genera una tabella per ogni statistica
+        for stat_key, stat_label, is_calculated in top5_stats:
+            # Raccogli i valori per tutti i giocatori per questa statistica
+            giocatori_stats = []
+            for giocatore, stats in stats_individuali.items():
+                if is_calculated:
+                    # Calcola la precisione di tiri
+                    if stat_key == 'precisione_tiri':
+                        tiri_totali = stats.get('tiri_totali', 0)
+                        tiri_in_porta = stats.get('tiri_in_porta_totali', 0)
+                        if tiri_totali > 0:
+                            precisione = round((tiri_in_porta / tiri_totali) * 100, 1)
+                            giocatori_stats.append({
+                                'Giocatore': giocatore.title(),
+                                stat_label: precisione
+                            })
+                else:
+                    # Statistica diretta
+                    if stat_key in stats:
+                        valore = stats[stat_key]
+                        if pd.notna(valore) and valore > 0:  # Solo giocatori con valore > 0
+                            giocatori_stats.append({
+                                'Giocatore': giocatore.title(),
+                                stat_label: int(valore)
+                            })
+            
+            # Se ci sono dati, crea la tabella Top 5
+            if giocatori_stats:
+                df_top5 = pd.DataFrame(giocatori_stats)
+                # Ordina per valore decrescente e prendi i top 5
+                df_top5 = df_top5.sort_values(by=stat_label, ascending=False).head(5).reset_index(drop=True)
+                # Aggiungi colonna Posizione
+                df_top5.insert(0, 'Posizione', range(1, len(df_top5) + 1))
+                
+                # Salva per visualizzazione successiva
+                tabelle_da_mostrare.append((stat_label, df_top5))
+                
+                # Aggiungi al PDF
+                pdf_table_sections.append(PdfTableSection(f"Top 5 - {stat_label}", df_top5.copy()))
+        
+        # Mostra le tabelle in layout a 4 colonne
+        for i in range(0, len(tabelle_da_mostrare), 4):
+            cols = st.columns(4)
+            for j, (stat_label, df_top5) in enumerate(tabelle_da_mostrare[i:i+4]):
+                with cols[j]:
+                    st.markdown(f"**{stat_label}**")
+                    st.dataframe(df_top5, use_container_width=True, hide_index=True)
 
 # === TAB 3: Stats Quartetti ===
 if "Stats Quartetti" in tab_names:

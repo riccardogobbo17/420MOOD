@@ -53,7 +53,11 @@ if 'categoria_selezionata' not in st.session_state:
     # Carica le categorie disponibili
     res_all = supabase.table("partite").select("categoria").execute()
     categorie_disponibili = sorted(list(set([p.get('categoria', 'Prima Squadra') for p in res_all.data if p.get('categoria')])))
-    st.session_state['categoria_selezionata'] = categorie_disponibili[0] if categorie_disponibili else 'Prima Squadra'
+    # Cerca "Campionato" come default, altrimenti usa la prima categoria disponibile
+    if 'Campionato' in categorie_disponibili:
+        st.session_state['categoria_selezionata'] = 'Campionato'
+    else:
+        st.session_state['categoria_selezionata'] = categorie_disponibili[0] if categorie_disponibili else 'Prima Squadra'
 
 categoria_attiva = st.session_state['categoria_selezionata']
 
@@ -72,9 +76,16 @@ if not partite:
 competizioni = sorted(list(set([p['competizione'] for p in partite])))
 competizioni.insert(0, "Tutte")  # Opzione per vedere tutte le competizioni
 
+# Imposta "Campionato" come default se disponibile, altrimenti "Tutte"
+if 'Campionato' in competizioni:
+    default_competizione = 'Campionato'
+else:
+    default_competizione = "Tutte"
+
 competizione_scelta = st.selectbox(
     "Seleziona competizione",
     competizioni,
+    index=competizioni.index(default_competizione) if default_competizione in competizioni else 0,
     key="competizione_select"
 )
 
@@ -439,7 +450,7 @@ def normalizza_stats_individuali(df_stats, minutaggi_data, tipo='giocatore'):
     
     # Colonne da normalizzare
     colonne_da_normalizzare = [
-        'gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_fuori', 
+        'gol_fatti', 'gol_subiti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_fuori', 
         'tiri_ribattuti', 'palo_traversa', 'palle_perse', 'tiri_ribattuti_noi',
         'palle_recuperate', 'falli_fatti', 'falli_subiti', 'ammonizioni', 'espulsioni',
         'parate', 'lanci', 'lanci_corretti', 'lanci_sbagliati',
@@ -521,8 +532,8 @@ if categoria_attiva.lower() in ['u15', 'u17']:
     tabs = st.tabs(["Stats Squadra", "Zone"])
     tab_names = ["Stats Squadra", "Zone"]
 else:
-    tabs = st.tabs(["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
-    tab_names = ["Stats Squadra", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+    tabs = st.tabs(["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
+    tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
 
 # === TAB 1: Stats Squadra ===
 with tabs[0]:
@@ -575,17 +586,119 @@ with tabs[0]:
         with col_p2:
             render_section("Loro", report_eventi['squadra']['portieri_loro'])
 
-# === TAB 2: Stats Individuali ===
+# === TAB 2: Top 5 ===
+if "Top 5" in tab_names:
+    with tabs[tab_names.index("Top 5")]:
+        st.header("🏆 Top 5")
+        
+        # Lista delle statistiche da mostrare (facilmente modificabile)
+        # Formato: (chiave_statistica, 'Nome Visualizzato', è_calcolata)
+        # Se è_calcolata=True, la statistica viene calcolata invece di essere letta direttamente
+        top5_stats = [
+            ('gol_fatti', 'Gol', False),
+            ('tiri_totali', 'Tiri', False),
+            ('tiri_in_porta_totali', 'Tiri in Porta', False),
+            ('precisione_tiri', 'Precisione Tiri (%)', True),  # Calcolata: tiri_in_porta / tiri_totali * 100
+            ('tiri_fuori', 'Tiri Fuori', False),
+            ('tiri_ribattuti', 'Tiri Ribattuti', False),
+            ('palo_traversa', 'Palo/Traversa', False),
+            ('palle_perse', 'Palle Perse', False),
+            ('tiri_ribattuti_noi', 'Tiri Ribattuti da Noi', False),
+            ('palle_recuperate', 'Palle Recuperate', False),
+            ('falli_fatti', 'Falli Fatti', False),
+            ('falli_subiti', 'Falli Subiti', False),
+            # ('ammonizioni', 'Ammonizioni', False),
+            # ('espulsioni', 'Espulsioni', False),
+        ]
+        
+        # Estrai i dati individuali totali
+        stats_individuali = report_eventi['individuali_split']['Totale']
+        
+        # Raccogli tutte le tabelle da visualizzare
+        tabelle_da_mostrare = []
+        
+        # Genera una tabella per ogni statistica
+        for stat_key, stat_label, is_calculated in top5_stats:
+            # Raccogli i valori per tutti i giocatori per questa statistica
+            giocatori_stats = []
+            for giocatore, stats in stats_individuali.items():
+                if is_calculated:
+                    # Calcola la precisione di tiri
+                    if stat_key == 'precisione_tiri':
+                        tiri_totali = stats.get('tiri_totali', 0)
+                        tiri_in_porta = stats.get('tiri_in_porta_totali', 0)
+                        if tiri_totali > 0:
+                            precisione = round((tiri_in_porta / tiri_totali) * 100, 1)
+                            giocatori_stats.append({
+                                'Giocatore': giocatore.title(),
+                                stat_label: precisione
+                            })
+                else:
+                    # Statistica diretta
+                    if stat_key in stats:
+                        valore = stats[stat_key]
+                        if pd.notna(valore) and valore > 0:  # Solo giocatori con valore > 0
+                            giocatori_stats.append({
+                                'Giocatore': giocatore.title(),
+                                stat_label: int(valore)
+                            })
+            
+            # Se ci sono dati, crea la tabella Top 5
+            if giocatori_stats:
+                df_top5 = pd.DataFrame(giocatori_stats)
+                # Ordina per valore decrescente e prendi i top 5
+                df_top5 = df_top5.sort_values(by=stat_label, ascending=False).head(5).reset_index(drop=True)
+                # Aggiungi colonna Posizione
+                df_top5.insert(0, 'Posizione', range(1, len(df_top5) + 1))
+                
+                # Salva per visualizzazione successiva
+                tabelle_da_mostrare.append((stat_label, df_top5))
+        
+        # Mostra le tabelle in layout a 4 colonne
+        for i in range(0, len(tabelle_da_mostrare), 4):
+            cols = st.columns(4)
+            for j, (stat_label, df_top5) in enumerate(tabelle_da_mostrare[i:i+4]):
+                with cols[j]:
+                    st.markdown(f"**{stat_label}**")
+                    st.dataframe(df_top5, use_container_width=True, hide_index=True)
+
+# === TAB 3: Stats Individuali ===
 if "Stats Individuali" in tab_names:
     with tabs[tab_names.index("Stats Individuali")]:
         st.header("Statistiche individuali giocatori aggregate")
-    
+        
+        def reorder_columns_gol(df):
+            """Riordina le colonne per mettere gol_subiti subito dopo gol_fatti"""
+            if df.empty:
+                return df
+            cols = list(df.columns)
+            if 'gol_fatti' in cols and 'gol_subiti' in cols:
+                # Trova l'indice di gol_fatti
+                idx_gol_fatti = cols.index('gol_fatti')
+                # Rimuovi gol_subiti dalla sua posizione attuale
+                cols.remove('gol_subiti')
+                # Inserisci gol_subiti subito dopo gol_fatti
+                cols.insert(idx_gol_fatti + 1, 'gol_subiti')
+                return df[cols]
+            return df
+        
         with st.expander("👥 Giocatori - Totale", expanded=False):
             df_tot = pd.DataFrame(report_eventi['individuali_split']['Totale']).T
             # Normalizza le statistiche
             df_tot = normalizza_stats_individuali(df_tot, minutaggi['totale'], tipo='giocatore')
-            # Riordina colonne: metti minuti_giocati all'inizio, poi stats grezze, poi normalizzate
-            cols = ['minuti_giocati'] + [c for c in df_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_tot.columns if '_per_partita' in c]
+            # Riordina colonne: metti minuti_giocati all'inizio, poi stats grezze (con gol_subiti dopo gol_fatti), poi normalizzate
+            cols_grezze = [c for c in df_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c]
+            df_temp = df_tot[cols_grezze]
+            df_temp = reorder_columns_gol(df_temp)
+            cols_grezze_ordinate = list(df_temp.columns)
+            cols = ['minuti_giocati'] + cols_grezze_ordinate + [c for c in df_tot.columns if '_per_partita' in c]
+            # Riordina anche le colonne normalizzate (gol_subiti_per_partita dopo gol_fatti_per_partita)
+            cols_norm = [c for c in cols if '_per_partita' in c]
+            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
+                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
+                cols_norm.remove('gol_subiti_per_partita')
+                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
+            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
             df_tot = df_tot[cols]
             df_tot = format_column_names(df_tot)
             df_tot = format_index_names(df_tot)
@@ -594,7 +707,16 @@ if "Stats Individuali" in tab_names:
         with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
             df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
             df_1t = normalizza_stats_individuali(df_1t, minutaggi['primo_tempo'], tipo='giocatore')
-            cols = ['minuti_giocati'] + [c for c in df_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_1t.columns if '_per_partita' in c]
+            cols_grezze = [c for c in df_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c]
+            df_temp = df_1t[cols_grezze]
+            df_temp = reorder_columns_gol(df_temp)
+            cols_grezze_ordinate = list(df_temp.columns)
+            cols_norm = [c for c in df_1t.columns if '_per_partita' in c]
+            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
+                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
+                cols_norm.remove('gol_subiti_per_partita')
+                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
+            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
             df_1t = df_1t[cols]
             df_1t = format_column_names(df_1t)
             df_1t = format_index_names(df_1t)
@@ -603,7 +725,16 @@ if "Stats Individuali" in tab_names:
         with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
             df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
             df_2t = normalizza_stats_individuali(df_2t, minutaggi['secondo_tempo'], tipo='giocatore')
-            cols = ['minuti_giocati'] + [c for c in df_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_2t.columns if '_per_partita' in c]
+            cols_grezze = [c for c in df_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c]
+            df_temp = df_2t[cols_grezze]
+            df_temp = reorder_columns_gol(df_temp)
+            cols_grezze_ordinate = list(df_temp.columns)
+            cols_norm = [c for c in df_2t.columns if '_per_partita' in c]
+            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
+                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
+                cols_norm.remove('gol_subiti_per_partita')
+                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
+            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
             df_2t = df_2t[cols]
             df_2t = format_column_names(df_2t)
             df_2t = format_index_names(df_2t)
@@ -638,7 +769,7 @@ if "Stats Individuali" in tab_names:
             df_port_2t = format_index_names(df_port_2t)
             st.dataframe(df_port_2t, use_container_width=True)
 
-# === TAB 3: Stats Quartetti ===
+# === TAB 4: Stats Quartetti ===
 if "Stats Quartetti" in tab_names:
     with tabs[tab_names.index("Stats Quartetti")]:
         st.header("Statistiche per quartetti aggregate")

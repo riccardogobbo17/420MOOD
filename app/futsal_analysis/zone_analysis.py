@@ -37,7 +37,7 @@ def calcola_report_zona(df):
         return {
             'gol_fatti': df[mask_gol_noi],
             'tiri_totali': df[mask_tiro_noi],
-            'tiri_in_porta_totali': df[mask_tiro_noi & df['esito'].isin(['Parata', 'Gol'])],
+            'tiri_in_porta_totali': df[mask_tiro_noi & df['esito'].isin(['Parata', 'Gol', 'Palo'])],
             'tiri_ribattuti': df[mask_tiro_noi & (df['esito'] == 'Ribattuto')],
             'tiri_fuori': df[mask_tiro_noi & (df['esito'] == 'Fuori')],
             'palo_traversa': df[mask_tiro_noi & (df['esito'] == 'Palo')],
@@ -54,7 +54,7 @@ def calcola_report_zona(df):
         return {
             'gol_subiti': df[mask_gol_loro],
             'tiri_totali_subiti': df[mask_tiro_loro],
-            'tiri_in_porta_totali_subiti': df[mask_tiro_loro & df['esito'].isin(['Parata', 'Gol'])],
+            'tiri_in_porta_totali_subiti': df[mask_tiro_loro & df['esito'].isin(['Parata', 'Gol', 'Palo'])],
             'tiri_ribattuti_da_noi': df[mask_tiro_loro & (df['esito'] == 'Ribattuto')],
             'tiri_fuori_loro': df[mask_tiro_loro & (df['esito'] == 'Fuori')],
             'palo_traversa_loro': df[mask_tiro_loro & (df['esito'] == 'Palo')],
@@ -91,7 +91,7 @@ def calcola_report_zona(df):
             # ATTACCO
             'gol_fatti': lambda d: d['evento'].str.contains('Gol', na=False) & (d['squadra'] == 'Noi'),
             'tiri_totali': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi'),
-            'tiri_in_porta_totali': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & d['esito'].isin(['Parata', 'Gol']),
+            'tiri_in_porta_totali': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & d['esito'].isin(['Parata', 'Gol', 'Palo']),
             'tiri_fuori': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Fuori'),
             'tiri_ribattuti': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Ribattuto'),
             'palo_traversa': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Palo'),

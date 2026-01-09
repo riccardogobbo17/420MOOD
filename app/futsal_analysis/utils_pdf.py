@@ -524,6 +524,62 @@ def generate_pdf_report(
             elements.append(table_full)
             elements.append(Spacer(1, 8))
 
+    def render_sections_columns_4(sections: List[PdfTableSection]) -> None:
+        """Rende le sezioni su quattro colonne con piccoli spazi tra le tabelle."""
+        if not sections:
+            return
+        # Calcola larghezza colonna per 4 colonne
+        column_width_4 = (available_width - (column_gap * 3)) / 4.0
+        row_cells: List = []
+        column_sections: List[List] = []
+        wide_sections: List[PdfTableSection] = []
+
+        for section in sections:
+            if section.dataframe.shape[0] > 18:
+                wide_sections.append(section)
+                continue
+            row_cells.append(build_section_table(section, column_width_4))
+            if len(row_cells) == 4:
+                column_sections.append(row_cells)
+                row_cells = []
+
+        if row_cells:
+            while len(row_cells) < 4:
+                row_cells.append("")
+            column_sections.append(row_cells)
+
+        for row in column_sections:
+            row_data = []
+            col_widths = []
+            for idx, cell in enumerate(row):
+                row_data.append(cell)
+                col_widths.append(column_width_4)
+                if idx < len(row) - 1:
+                    row_data.append("")
+                    col_widths.append(column_gap)
+            grid = Table(
+                [row_data],
+                colWidths=col_widths,
+                hAlign="CENTER",
+            )
+            grid.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
+            elements.append(grid)
+            elements.append(Spacer(1, 6))
+
+        for section in wide_sections:
+            table_full = build_section_table(section, available_width)
+            table_full.hAlign = "CENTER"
+            elements.append(table_full)
+            elements.append(Spacer(1, 8))
+
     def render_sections_single(sections: List[PdfTableSection], use_small_header: bool = False) -> None:
         """Rende ogni sezione a tutta larghezza (una colonna)."""
         for section in sections:
@@ -538,6 +594,7 @@ def generate_pdf_report(
     quartetti_sections: List[PdfTableSection] = []
     minutaggi_sections: List[PdfTableSection] = []
     live_sections: List[PdfTableSection] = []
+    top5_sections: List[PdfTableSection] = []
     other_sections: List[PdfTableSection] = []
 
     # Titoli delle sezioni Live (da formattare in tre colonne)
@@ -560,11 +617,14 @@ def generate_pdf_report(
             minutaggi_sections.append(section)
         elif title in live_section_titles:
             live_sections.append(section)
+        elif title.startswith("Top 5"):
+            top5_sections.append(section)
         else:
             other_sections.append(section)
 
     groups: List[Tuple[str, List[PdfTableSection], Callable]] = [
         ("Stats Squadra", team_sections, lambda s: render_sections_columns(s, use_index_column=False)),
+        ("Top 5", top5_sections, render_sections_columns_4),
         ("Stats Individuali", individual_sections, lambda s: render_sections_single(s, use_small_header=True)),
         ("Stats Quartetti", quartetti_sections, lambda s: render_sections_single(s, use_small_header=True)),
         ("Minutaggi", minutaggi_sections, lambda s: render_sections_columns(s, use_index_column=True)),

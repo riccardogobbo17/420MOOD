@@ -68,7 +68,7 @@ def render_panoramica_stagione(df_all, partite_ids):
     falli_medi_subiti = falli_subiti_totali / num_partite if num_partite > 0 else 0
     
     # Percentuale tiri in porta
-    tiri_in_porta_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi') & df_all['esito'].isin(['Parata', 'Gol'])])
+    tiri_in_porta_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi') & df_all['esito'].isin(['Parata', 'Gol', 'Palo'])])
     perc_tiri_in_porta = (tiri_in_porta_totali / tiri_totali * 100) if tiri_totali > 0 else 0
     
     # Calcola vittorie, pareggi, sconfitte
@@ -117,7 +117,7 @@ def render_panoramica_stagione(df_all, partite_ids):
     
     # Parate del portiere
     parate_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro') & (df_all['esito'] == 'Parata')])
-    tiri_in_porta_subiti = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro') & df_all['esito'].isin(['Parata', 'Gol'])])
+    tiri_in_porta_subiti = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro') & df_all['esito'].isin(['Parata', 'Gol', 'Palo'])])
     perc_parate = (parate_totali / tiri_in_porta_subiti * 100) if tiri_in_porta_subiti > 0 else 0
     
     # --- VISUALIZZAZIONE METRICHE (4 COLONNE COMPATTE) ---
