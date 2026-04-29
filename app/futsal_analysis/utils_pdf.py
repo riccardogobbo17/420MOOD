@@ -141,7 +141,7 @@ def generate_pdf_from_tables(title: str, sections: Iterable[Section]) -> bytes:
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5f5")),
             ("FONTSIZE", (0, 1), (-1, -1), 9),
@@ -183,6 +183,7 @@ def generate_pdf_report(
     title: str,
     table_sections: Optional[Sequence[PdfTableSection]] = None,
     image_sections: Optional[Sequence[PdfImageSection]] = None,
+    compact_tables: bool = False,
 ) -> bytes:
     """Genera un PDF con sezioni tabellari e immagini."""
 
@@ -230,6 +231,10 @@ def generate_pdf_report(
     )
 
     # Stile delle tabelle: font ridimensionati e padding verticale contenuto.
+    header_font_size = 5 if compact_tables else 6
+    body_font_size = 5 if compact_tables else 6
+    small_header_font_size = 3 if compact_tables else 4
+
     table_style = TableStyle(
         [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
@@ -239,9 +244,9 @@ def generate_pdf_report(
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             # Font dell'intestazione di tabella (riga 0).
-            ("FONTSIZE", (0, 0), (-1, 0), 7),
+            ("FONTSIZE", (0, 0), (-1, 0), header_font_size),
             # Font delle celle di dati (righe > 0).
-            ("FONTSIZE", (0, 1), (-1, -1), 6),
+            ("FONTSIZE", (0, 1), (-1, -1), body_font_size),
             ("TOPPADDING", (0, 0), (-1, 0), 0.8),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 0.8),
             ("TOPPADDING", (0, 1), (-1, -1), 0.4),
@@ -261,9 +266,9 @@ def generate_pdf_report(
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             # Font dell'intestazione di tabella (riga 0) - ridotto per stats individuali e quartetti.
-            ("FONTSIZE", (0, 0), (-1, 0), 5),
+            ("FONTSIZE", (0, 0), (-1, 0), small_header_font_size),
             # Font delle celle di dati (righe > 0).
-            ("FONTSIZE", (0, 1), (-1, -1), 6),
+            ("FONTSIZE", (0, 1), (-1, -1), body_font_size),
             ("TOPPADDING", (0, 0), (-1, 0), 0.8),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 0.8),
             ("TOPPADDING", (0, 1), (-1, -1), 0.4),

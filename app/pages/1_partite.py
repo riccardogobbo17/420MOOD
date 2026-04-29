@@ -183,7 +183,7 @@ with tabs[0]:
         for col in df.columns:
             # Rimuovi underscore e capitalizza ogni parola
             if isinstance(col, str):
-                formatted = col.replace('_', ' ').title()
+                formatted = col.replace('_', ' ').title().replace(' Per Partita', ' x P')
             else:
                 formatted = str(col)
             new_columns[col] = formatted
@@ -195,15 +195,15 @@ with tabs[0]:
         for idx in df.index:
             if isinstance(idx, tuple):
                 # Mantieni tuple per sfruttare la visualizzazione "chip" di Streamlit
-                formatted = tuple(part.replace('_', ' ').title() for part in idx)
+                formatted = tuple(part.replace('_', ' ').title().replace(' Per Partita', ' x P') for part in idx)
                 new_index[idx] = formatted
             elif isinstance(idx, str):
                 if ';' in idx:
-                    parts = [p.strip().replace('_', ' ').title() for p in idx.split(';')]
+                    parts = [p.strip().replace('_', ' ').title().replace(' Per Partita', ' x P') for p in idx.split(';')]
                     formatted = tuple(parts)
                     new_index[idx] = formatted
                 else:
-                    formatted = idx.replace('_', ' ').title()
+                    formatted = idx.replace('_', ' ').title().replace(' Per Partita', ' x P')
                     new_index[idx] = formatted
             else:
                 new_index[idx] = str(idx)
@@ -225,6 +225,21 @@ with tabs[0]:
 
         if pdf_title:
             pdf_table_sections.append(PdfTableSection(pdf_title, df_sec.copy()))
+
+    def remove_portiere_integrazione_stats(data_dict):
+        """Rimuove integrazione_portiere (totale/ok/ko) da un dict stats per periodo."""
+        if not isinstance(data_dict, dict):
+            return data_dict
+        cleaned = {}
+        for periodo, values in data_dict.items():
+            if isinstance(values, dict):
+                cleaned[periodo] = {
+                    k: v for k, v in values.items()
+                    if not str(k).startswith('integrazione_portiere')
+                }
+            else:
+                cleaned[periodo] = values
+        return cleaned
 
     # Sezione Possesso
     with st.expander("⚽ Possesso", expanded=False):
@@ -292,15 +307,17 @@ with tabs[0]:
     with st.expander("🥅 Portieri", expanded=False):
         col_p1, col_p2 = st.columns(2)
         with col_p1:
+            portieri_noi_clean = remove_portiere_integrazione_stats(report_eventi['squadra']['portieri_noi'])
             render_section(
                 "Noi",
-                report_eventi['squadra']['portieri_noi'],
+                portieri_noi_clean,
                 pdf_title="Stats Squadra - Portieri Noi",
             )
         with col_p2:
+            portieri_loro_clean = remove_portiere_integrazione_stats(report_eventi['squadra']['portieri_loro'])
             render_section(
                 "Loro",
-                report_eventi['squadra']['portieri_loro'],
+                portieri_loro_clean,
                 pdf_title="Stats Squadra - Portieri Loro",
             )
 
@@ -354,10 +371,22 @@ if "Stats Individuali" in tab_names:
                 pdf_table_sections.append(PdfTableSection("Stats Individuali - Secondo Tempo", df_2t.copy()))
 
         st.header("Statistiche portieri individuali")
+
+        def prepare_portieri_table(df_portieri):
+            """Prepara la tabella portieri: aggiunge ordine colonne e rimuove integrazione."""
+            if df_portieri.empty:
+                return df_portieri
+            cols_da_rimuovere = [c for c in df_portieri.columns if c.startswith('integrazione_portiere')]
+            df_portieri = df_portieri.drop(columns=cols_da_rimuovere, errors='ignore')
+            ordered_cols = ['gol_subiti', 'parate', 'percentuale_parate']
+            first_cols = [c for c in ordered_cols if c in df_portieri.columns]
+            other_cols = [c for c in df_portieri.columns if c not in first_cols]
+            return df_portieri[first_cols + other_cols]
         
         # Sezione Portieri con sezioni espandibili
         with st.expander("🥅 Portieri - Totale", expanded=False):
             df_port_tot = pd.DataFrame(report_eventi['portieri_individuali_split']['Totale']).T
+            df_port_tot = prepare_portieri_table(df_port_tot)
             df_port_tot = format_column_names(df_port_tot)
             df_port_tot = format_index_names(df_port_tot)
             st.dataframe(df_port_tot, use_container_width=True)
@@ -366,6 +395,7 @@ if "Stats Individuali" in tab_names:
         
         with st.expander("🥅 Portieri - Primo Tempo", expanded=False):
             df_port_1t = pd.DataFrame(report_eventi['portieri_individuali_split']['1T']).T
+            df_port_1t = prepare_portieri_table(df_port_1t)
             df_port_1t = format_column_names(df_port_1t)
             df_port_1t = format_index_names(df_port_1t)
             st.dataframe(df_port_1t, use_container_width=True)
@@ -374,6 +404,7 @@ if "Stats Individuali" in tab_names:
         
         with st.expander("🥅 Portieri - Secondo Tempo", expanded=False):
             df_port_2t = pd.DataFrame(report_eventi['portieri_individuali_split']['2T']).T
+            df_port_2t = prepare_portieri_table(df_port_2t)
             df_port_2t = format_column_names(df_port_2t)
             df_port_2t = format_index_names(df_port_2t)
             st.dataframe(df_port_2t, use_container_width=True)

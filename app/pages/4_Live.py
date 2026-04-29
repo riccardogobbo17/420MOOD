@@ -95,7 +95,7 @@ def main():
             new_columns = {}
             for col in df.columns:
                 # Rimuovi underscore e capitalizza ogni parola
-                formatted = col.replace('_', ' ').title()
+                formatted = col.replace('_', ' ').title().replace(' Per Partita', ' x P')
                 new_columns[col] = formatted
             return df.rename(columns=new_columns)
         
@@ -104,7 +104,7 @@ def main():
             new_index = {}
             for idx in df.index:
                 if isinstance(idx, str):
-                    formatted = idx.replace('_', ' ').title()
+                    formatted = idx.replace('_', ' ').title().replace(' Per Partita', ' x P')
                     new_index[idx] = formatted
             return df.rename(index=new_index)
 

@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 from matplotlib import cm
 import matplotlib.pyplot as plt
 
@@ -11,6 +12,12 @@ from futsal_analysis.utils_minutaggi import *
 from futsal_analysis.pitch_drawer import FutsalPitch
 from futsal_analysis.zone_analysis import *
 from futsal_analysis.dashboard_utils import render_panoramica_stagione
+from futsal_analysis.utils_pdf import (
+    PdfImageSection,
+    PdfTableSection,
+    figure_to_png_bytes,
+    generate_pdf_report,
+)
 
 st.set_page_config(page_title="Stats Stagione", layout="wide", page_icon="📊")
 
@@ -72,35 +79,36 @@ if not partite:
     st.warning(f"Nessuna partita trovata per la categoria '{categoria_attiva}'.")
     st.stop()
 
-# --- Select box per competizione ---
+# --- Multi-select per competizione ---
 competizioni = sorted(list(set([p['competizione'] for p in partite])))
-competizioni.insert(0, "Tutte")  # Opzione per vedere tutte le competizioni
 
-# Imposta "Campionato" come default se disponibile, altrimenti "Tutte"
+# Default: Campionato se presente, altrimenti tutte le competizioni
 if 'Campionato' in competizioni:
-    default_competizione = 'Campionato'
+    default_competizioni = ['Campionato']
 else:
-    default_competizione = "Tutte"
+    default_competizioni = competizioni
 
-competizione_scelta = st.selectbox(
+competizioni_scelte = st.multiselect(
     "Seleziona competizione",
     competizioni,
-    index=competizioni.index(default_competizione) if default_competizione in competizioni else 0,
-    key="competizione_select"
+    default=default_competizioni,
+    key="competizioni_select"
 )
 
-# Filtra partite per competizione
-if competizione_scelta == "Tutte":
-    partite_filtrate = partite
-else:
-    partite_filtrate = [p for p in partite if p['competizione'] == competizione_scelta]
+if not competizioni_scelte:
+    st.warning("Seleziona almeno una competizione per visualizzare le statistiche.")
+    st.stop()
+
+# Filtra partite per le competizioni selezionate
+partite_filtrate = [p for p in partite if p['competizione'] in competizioni_scelte]
 
 if not partite_filtrate:
-    st.warning(f"Nessuna partita trovata per la competizione '{competizione_scelta}'.")
+    st.warning(f"Nessuna partita trovata per le competizioni selezionate: {', '.join(competizioni_scelte)}.")
     st.stop()
 
 # --- Carica eventi per tutte le partite filtrate ---
-st.info(f"Caricamento dati per {len(partite_filtrate)} partite della competizione '{competizione_scelta}'...")
+competizioni_label = ", ".join(competizioni_scelte)
+st.info(f"Caricamento dati per {len(partite_filtrate)} partite nelle competizioni: {competizioni_label}.")
 
 # Carica eventi: una query per ogni partita
 partite_ids = [p['id'] for p in partite_filtrate]
@@ -133,6 +141,29 @@ render_panoramica_stagione(df_all, partite_ids)
 # --- Calcola report completo per tutti gli eventi ---
 st.markdown("---")
 report_eventi = calcola_report_completo(df_all)
+pdf_table_sections = []
+MAX_ROWS_PER_PDF_SECTION = 30
+
+def append_pdf_section(title: str, df: pd.DataFrame):
+    if df.empty:
+        return
+    df_pdf = df.copy()
+    if "Portieri" in title:
+        cols_da_rimuovere = [
+            c for c in df_pdf.columns
+            if str(c).strip().lower().replace(" ", "_").startswith("integrazione_portiere")
+        ]
+        df_pdf = df_pdf.drop(columns=cols_da_rimuovere, errors='ignore')
+    if len(df_pdf) > MAX_ROWS_PER_PDF_SECTION:
+        df_pdf = df_pdf.head(MAX_ROWS_PER_PDF_SECTION)
+    pdf_table_sections.append(PdfTableSection(title, df_pdf))
+
+zone_pdf_context = {
+    "report_zona": {},
+    "team_att_metrics": [],
+    "team_dif_metrics": [],
+    "player_metrics": {},
+}
 
 # --- Funzioni helper ---
 
@@ -140,7 +171,7 @@ def format_column_names(df):
     """Formatta i nomi delle colonne rimuovendo underscore e capitalizzando"""
     new_columns = {}
     for col in df.columns:
-        formatted = col.replace('_', ' ').title()
+        formatted = col.replace('_', ' ').title().replace(' Per Partita', ' x P')
         new_columns[col] = formatted
     return df.rename(columns=new_columns)
 
@@ -149,21 +180,21 @@ def format_index_names(df):
     new_index = {}
     for idx in df.index:
         if isinstance(idx, tuple):
-            formatted = tuple(part.replace('_', ' ').title() for part in idx)
+            formatted = tuple(part.replace('_', ' ').title().replace(' Per Partita', ' x P') for part in idx)
             new_index[idx] = formatted
         elif isinstance(idx, str):
             if ';' in idx:
-                parts = [p.strip().replace('_', ' ').title() for p in idx.split(';')]
+                parts = [p.strip().replace('_', ' ').title().replace(' Per Partita', ' x P') for p in idx.split(';')]
                 formatted = tuple(parts)
                 new_index[idx] = formatted
             else:
-                formatted = idx.replace('_', ' ').title()
+                formatted = idx.replace('_', ' ').title().replace(' Per Partita', ' x P')
                 new_index[idx] = formatted
         else:
             new_index[idx] = str(idx)
     return df.rename(index=new_index)
 
-def render_section(title, data_dict, show_title=True):
+def render_section(title, data_dict, show_title=True, pdf_title=None):
     if show_title:
         st.markdown(f"**{title}**")
     try:
@@ -175,6 +206,25 @@ def render_section(title, data_dict, show_title=True):
     df_sec = format_index_names(df_sec)
     
     st.dataframe(df_sec, use_container_width=True)
+    if pdf_title and not df_sec.empty:
+        append_pdf_section(pdf_title, df_sec)
+
+quartetti_columns_to_drop = [
+    'angoli',
+    'laterali',
+    'angoli_subiti',
+    'laterali_subiti',
+    'ammonizioni',
+    'espulsioni',
+]
+
+def clean_quartetti_columns(df_input: pd.DataFrame) -> pd.DataFrame:
+    if df_input.empty:
+        return df_input
+    cols_to_drop = [col for col in quartetti_columns_to_drop if col in df_input.columns]
+    if cols_to_drop:
+        df_input = df_input.drop(columns=cols_to_drop)
+    return df_input
 
 # Funzione per aggregare minutaggi di più partite (deve stare prima dell'uso)
 def aggrega_minutaggi_partite(partite_ids, df_eventi):
@@ -541,11 +591,11 @@ with tabs[0]:
     
     # Sezione Possesso
     with st.expander("⚽ Possesso", expanded=False):
-        render_section("Attacco", report_eventi['squadra']['attacco'], show_title=False)
+        render_section("Attacco", report_eventi['squadra']['attacco'], show_title=False, pdf_title="Stats Squadra - Possesso Attacco")
     
     # Sezione Non Possesso
     with st.expander("🛡️ Non Possesso", expanded=False):
-        render_section("Difesa", report_eventi['squadra']['difesa'], show_title=False)
+        render_section("Difesa", report_eventi['squadra']['difesa'], show_title=False, pdf_title="Stats Squadra - Non Possesso Difesa")
     
     # Sezione Perse/Recuperate
     with st.expander("🔄 Perse/Recuperate", expanded=False):
@@ -572,19 +622,19 @@ with tabs[0]:
                 'ripartenze_loro': ripartenze_loro
             }
         
-        render_section("Perse/Recuperate", palle_stats, show_title=False)
+        render_section("Perse/Recuperate", palle_stats, show_title=False, pdf_title="Stats Squadra - Perse e Recuperate")
     
     # Sezione Falli
     with st.expander("⚠️ Falli", expanded=False):
-        render_section("Falli", report_eventi['squadra']['falli'], show_title=False)
+        render_section("Falli", report_eventi['squadra']['falli'], show_title=False, pdf_title="Stats Squadra - Falli")
     
     # Sezione Portieri
     with st.expander("🥅 Portieri", expanded=False):
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            render_section("Noi", report_eventi['squadra']['portieri_noi'])
+            render_section("Noi", report_eventi['squadra']['portieri_noi'], pdf_title="Stats Squadra - Portieri Noi")
         with col_p2:
-            render_section("Loro", report_eventi['squadra']['portieri_loro'])
+            render_section("Loro", report_eventi['squadra']['portieri_loro'], pdf_title="Stats Squadra - Portieri Loro")
 
 # === TAB 2: Top 5 ===
 if "Top 5" in tab_names:
@@ -661,6 +711,8 @@ if "Top 5" in tab_names:
                 with cols[j]:
                     st.markdown(f"**{stat_label}**")
                     st.dataframe(df_top5, use_container_width=True, hide_index=True)
+                    if not df_top5.empty:
+                        append_pdf_section(f"Top 5 - {stat_label}", df_top5)
 
 # === TAB 3: Stats Individuali ===
 if "Stats Individuali" in tab_names:
@@ -703,6 +755,8 @@ if "Stats Individuali" in tab_names:
             df_tot = format_column_names(df_tot)
             df_tot = format_index_names(df_tot)
             st.dataframe(df_tot, use_container_width=True)
+            if not df_tot.empty:
+                append_pdf_section("Stats Individuali - Totale", df_tot)
         
         with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
             df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
@@ -721,6 +775,8 @@ if "Stats Individuali" in tab_names:
             df_1t = format_column_names(df_1t)
             df_1t = format_index_names(df_1t)
             st.dataframe(df_1t, use_container_width=True)
+            if not df_1t.empty:
+                append_pdf_section("Stats Individuali - Primo Tempo", df_1t)
         
         with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
             df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
@@ -739,6 +795,8 @@ if "Stats Individuali" in tab_names:
             df_2t = format_column_names(df_2t)
             df_2t = format_index_names(df_2t)
             st.dataframe(df_2t, use_container_width=True)
+            if not df_2t.empty:
+                append_pdf_section("Stats Individuali - Secondo Tempo", df_2t)
 
         st.header("Statistiche portieri individuali aggregate")
         
@@ -750,6 +808,8 @@ if "Stats Individuali" in tab_names:
             df_port_tot = format_column_names(df_port_tot)
             df_port_tot = format_index_names(df_port_tot)
             st.dataframe(df_port_tot, use_container_width=True)
+            if not df_port_tot.empty:
+                append_pdf_section("Stats Portieri Individuali - Totale", df_port_tot)
         
         with st.expander("🥅 Portieri - Primo Tempo", expanded=False):
             df_port_1t = pd.DataFrame(report_eventi['portieri_individuali_split']['1T']).T
@@ -759,6 +819,8 @@ if "Stats Individuali" in tab_names:
             df_port_1t = format_column_names(df_port_1t)
             df_port_1t = format_index_names(df_port_1t)
             st.dataframe(df_port_1t, use_container_width=True)
+            if not df_port_1t.empty:
+                append_pdf_section("Stats Portieri Individuali - Primo Tempo", df_port_1t)
         
         with st.expander("🥅 Portieri - Secondo Tempo", expanded=False):
             df_port_2t = pd.DataFrame(report_eventi['portieri_individuali_split']['2T']).T
@@ -768,6 +830,8 @@ if "Stats Individuali" in tab_names:
             df_port_2t = format_column_names(df_port_2t)
             df_port_2t = format_index_names(df_port_2t)
             st.dataframe(df_port_2t, use_container_width=True)
+            if not df_port_2t.empty:
+                append_pdf_section("Stats Portieri Individuali - Secondo Tempo", df_port_2t)
 
 # === TAB 4: Stats Quartetti ===
 if "Stats Quartetti" in tab_names:
@@ -787,6 +851,9 @@ if "Stats Quartetti" in tab_names:
                 df_quartetti_tot = format_column_names(df_quartetti_tot)
                 df_quartetti_tot = format_index_names(df_quartetti_tot)
                 st.dataframe(df_quartetti_tot, use_container_width=True)
+                if not df_quartetti_tot.empty:
+                    df_quartetti_tot_pdf = clean_quartetti_columns(df_quartetti_tot.copy())
+                    append_pdf_section("Stats Quartetti - Totale", df_quartetti_tot_pdf)
             else:
                 st.info("Nessun quartetto trovato.")
         
@@ -800,6 +867,7 @@ if "Stats Quartetti" in tab_names:
                 df_quartetti_1t = format_column_names(df_quartetti_1t)
                 df_quartetti_1t = format_index_names(df_quartetti_1t)
                 st.dataframe(df_quartetti_1t, use_container_width=True)
+                # Non aggiungere al PDF - solo Totale per i quartetti (come in 1_Partite.py)
             else:
                 st.info("Nessun quartetto trovato nel primo tempo.")
         
@@ -813,6 +881,7 @@ if "Stats Quartetti" in tab_names:
                 df_quartetti_2t = format_column_names(df_quartetti_2t)
                 df_quartetti_2t = format_index_names(df_quartetti_2t)
                 st.dataframe(df_quartetti_2t, use_container_width=True)
+                # Non aggiungere al PDF - solo Totale per i quartetti (come in 1_Partite.py)
             else:
                 st.info("Nessun quartetto trovato nel secondo tempo.")
         
@@ -821,27 +890,36 @@ if "Stats Quartetti" in tab_names:
         with st.expander("👤 Quinto Uomo - Totale", expanded=False):
             if report_quinto_uomo['Totale']:
                 df_quinto_tot = pd.DataFrame(report_quinto_uomo['Totale']).T
+                df_quinto_tot = clean_quartetti_columns(df_quinto_tot)
                 df_quinto_tot = format_column_names(df_quinto_tot)
                 df_quinto_tot = format_index_names(df_quinto_tot)
                 st.dataframe(df_quinto_tot, use_container_width=True)
+                if not df_quinto_tot.empty:
+                    append_pdf_section("Quinto Uomo - Totale", df_quinto_tot)
             else:
                 st.info("Nessuna situazione con quinto uomo trovata.")
         
         with st.expander("👤 Quinto Uomo - Primo Tempo", expanded=False):
             if report_quinto_uomo['1T']:
                 df_quinto_1t = pd.DataFrame(report_quinto_uomo['1T']).T
+                df_quinto_1t = clean_quartetti_columns(df_quinto_1t)
                 df_quinto_1t = format_column_names(df_quinto_1t)
                 df_quinto_1t = format_index_names(df_quinto_1t)
                 st.dataframe(df_quinto_1t, use_container_width=True)
+                if not df_quinto_1t.empty:
+                    append_pdf_section("Quinto Uomo - Primo Tempo", df_quinto_1t)
             else:
                 st.info("Nessuna situazione con quinto uomo trovata nel primo tempo.")
         
         with st.expander("👤 Quinto Uomo - Secondo Tempo", expanded=False):
             if report_quinto_uomo['2T']:
                 df_quinto_2t = pd.DataFrame(report_quinto_uomo['2T']).T
+                df_quinto_2t = clean_quartetti_columns(df_quinto_2t)
                 df_quinto_2t = format_column_names(df_quinto_2t)
                 df_quinto_2t = format_index_names(df_quinto_2t)
                 st.dataframe(df_quinto_2t, use_container_width=True)
+                if not df_quinto_2t.empty:
+                    append_pdf_section("Quinto Uomo - Secondo Tempo", df_quinto_2t)
             else:
                 st.info("Nessuna situazione con quinto uomo trovata nel secondo tempo.")
 
@@ -850,10 +928,12 @@ with tabs[tab_names.index("Zone")]:
     st.header("Analisi per zone di campo aggregate")
     campo = FutsalPitch()
     report_zona = calcola_report_zona(df_all)
+    zone_pdf_context["report_zona"] = report_zona
 
     with st.expander("🏆 Analisi Zone di Squadra", expanded=False):
         st.subheader("Statistiche di squadra per zona")
         per_side_team = st.checkbox("Mostra split per lato (Sx/Dx)", value=True, key="zona_team_per_side")
+        zone_pdf_context["team_per_side"] = per_side_team
         col1, col2 = st.columns(2)
 
         with col1:
@@ -869,6 +949,7 @@ with tabs[tab_names.index("Zone")]:
                     key="zona_stats_attacco_squadra"
                 )
                 if stat_keys_att_sel:
+                    zone_pdf_context["team_att_metrics"] = stat_keys_att_sel
                     fig, ax = draw_team_metric_per_zone(
                         report_zona, campo, stat_keys_att_sel,
                         team_key="attacco",
@@ -893,6 +974,7 @@ with tabs[tab_names.index("Zone")]:
                     key="zona_stats_difesa_squadra"
                 )
                 if stat_keys_dif_sel:
+                    zone_pdf_context["team_dif_metrics"] = stat_keys_dif_sel
                     fig, ax = draw_team_metric_per_zone(
                         report_zona, campo, stat_keys_dif_sel,
                         team_key="difesa",
@@ -909,23 +991,41 @@ with tabs[tab_names.index("Zone")]:
         with st.expander("👤 Analisi Zone Individuali", expanded=False):
             st.subheader("Statistiche individuali per zona")
             per_side_player = st.checkbox("Mostra split per lato (Sx/Dx) – giocatore", value=True, key="zona_player_per_side")
+            zone_pdf_context["player_per_side"] = per_side_player
             giocatori = sorted({
                 g for zona in report_zona['individuali'].values()
                 for g in zona.keys() if g.strip()
             })
             
             if giocatori:
+                player_att_metrics_all = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'palle_perse']
+                player_dif_metrics_all = ['tiri_ribattuti_noi', 'palle_recuperate', 'falli_subiti']
+
+                player_metrics_map = {}
+                for giocatore in giocatori:
+                    sample_stats = None
+                    for zona in report_zona['individuali'].values():
+                        if giocatore in zona:
+                            sample_stats = zona[giocatore]
+                            break
+                    if sample_stats:
+                        att_metrics = [m for m in player_att_metrics_all if m in sample_stats]
+                        dif_metrics = [m for m in player_dif_metrics_all if m in sample_stats]
+                    else:
+                        att_metrics = []
+                        dif_metrics = []
+                    player_metrics_map[giocatore] = {"attacco": att_metrics, "difesa": dif_metrics}
+
+                # Per il PDF includi tutti i giocatori (non solo quello selezionato nella UI)
+                zone_pdf_context["player_metrics"] = player_metrics_map
+
                 giocatore_scelto = st.selectbox("Scegli giocatore", giocatori, key="zona_giocatore")
 
                 col1, col2 = st.columns(2)
 
                 with col1:
                     st.markdown(f"#### Attacco – {giocatore_scelto}")
-                    metriche_attacco_gioc = []
-                    for zona in report_zona['individuali'].values():
-                        if giocatore_scelto in zona:
-                            metriche_attacco_gioc = ['gol_fatti', 'tiri_totali', 'tiri_in_porta_totali', 'tiri_ribattuti', 'tiri_fuori', 'palo_traversa', 'palle_perse']
-                            break
+                    metriche_attacco_gioc = player_metrics_map.get(giocatore_scelto, {}).get("attacco", [])
 
                     stat_keys_att_gioc_sel = st.multiselect(
                         "Statistiche attacco (giocatore)",
@@ -933,6 +1033,8 @@ with tabs[tab_names.index("Zone")]:
                         default=metriche_attacco_gioc[:3],
                         key="zona_stats_attacco_gioc"
                     )
+                    if stat_keys_att_gioc_sel:
+                        zone_pdf_context.setdefault("player_metrics", {}).setdefault(giocatore_scelto, {})["attacco"] = stat_keys_att_gioc_sel
 
                     if stat_keys_att_gioc_sel:
                         fig, ax = draw_player_metric_per_zone(
@@ -946,11 +1048,7 @@ with tabs[tab_names.index("Zone")]:
 
                 with col2:
                     st.markdown(f"#### Difesa – {giocatore_scelto}")
-                    metriche_difesa_gioc = []
-                    for zona in report_zona['individuali'].values():
-                        if giocatore_scelto in zona:
-                            metriche_difesa_gioc = ['tiri_ribattuti_noi', 'palle_recuperate', 'falli_subiti']
-                            break
+                    metriche_difesa_gioc = player_metrics_map.get(giocatore_scelto, {}).get("difesa", [])
 
                     stat_keys_dif_gioc_sel = st.multiselect(
                         "Statistiche difesa (giocatore)",
@@ -958,6 +1056,8 @@ with tabs[tab_names.index("Zone")]:
                         default=metriche_difesa_gioc[:3],
                         key="zona_stats_difesa_gioc"
                     )
+                    if stat_keys_dif_gioc_sel:
+                        zone_pdf_context.setdefault("player_metrics", {}).setdefault(giocatore_scelto, {})["difesa"] = stat_keys_dif_gioc_sel
 
                     if stat_keys_dif_gioc_sel:
                         fig, ax = draw_player_metric_per_zone(
@@ -1000,3 +1100,137 @@ if "Minutaggi" in tab_names:
                         df_minutaggi = categorie[key_cat].copy()
                         df_minutaggi = format_column_names(df_minutaggi)
                         st.dataframe(df_minutaggi)
+                        if not df_minutaggi.empty:
+                            # Escludi Minutaggi - Quartetti per Primo tempo e Secondo tempo, mantieni solo Totale
+                            if titolo == "Quartetto" and periodo != "totale":
+                                continue
+                            append_pdf_section(f"Minutaggi - {titolo} ({label_to_title.get(periodo, periodo)})", df_minutaggi)
+
+st.markdown("---")
+st.subheader("Esporta report stagione")
+
+has_zone_pdf_content = bool(zone_pdf_context.get("team_att_metrics") or zone_pdf_context.get("team_dif_metrics") or zone_pdf_context.get("player_metrics"))
+if pdf_table_sections or has_zone_pdf_content:
+    if st.button("📄 Genera PDF", key="generate_stats_pdf"):
+        with st.spinner("Generazione report PDF in corso..."):
+            file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            export_title = f"Report Stagione - {categoria_attiva} ({competizioni_label})"
+            image_sections = []
+
+            def metric_label(name: str) -> str:
+                return name.replace('_', ' ').title()
+
+            zona_report = zone_pdf_context.get("report_zona", {})
+            per_side_team_pdf = zone_pdf_context.get("team_per_side", True)
+            per_side_player_pdf = zone_pdf_context.get("player_per_side", True)
+
+            for metric in zone_pdf_context.get("team_att_metrics", []):
+                try:
+                    fig, _ = draw_team_metric_per_zone(
+                        zona_report,
+                        FutsalPitch(),
+                        [metric],
+                        team_key="attacco",
+                        title=f"Attacco - {metric_label(metric)}",
+                        cmap=cm.Reds,
+                        per_side=per_side_team_pdf,
+                    )
+                    fig.set_size_inches(4.0, 3.0)
+                    image_sections.append(
+                        PdfImageSection(
+                            f"Zone Squadra Attacco - {metric_label(metric)}",
+                            figure_to_png_bytes(fig),
+                            max_width=320,
+                        )
+                    )
+                    plt.close(fig)
+                except Exception:
+                    continue
+
+            for metric in zone_pdf_context.get("team_dif_metrics", []):
+                try:
+                    fig, _ = draw_team_metric_per_zone(
+                        zona_report,
+                        FutsalPitch(),
+                        [metric],
+                        team_key="difesa",
+                        title=f"Difesa - {metric_label(metric)}",
+                        cmap=cm.Blues,
+                        per_side=per_side_team_pdf,
+                    )
+                    fig.set_size_inches(4.0, 3.0)
+                    image_sections.append(
+                        PdfImageSection(
+                            f"Zone Squadra Difesa - {metric_label(metric)}",
+                            figure_to_png_bytes(fig),
+                            max_width=320,
+                        )
+                    )
+                    plt.close(fig)
+                except Exception:
+                    continue
+
+            zona_individuali = zona_report.get("individuali", {})
+            for giocatore, metriche in zone_pdf_context.get("player_metrics", {}).items():
+                for metric in metriche.get("attacco", []):
+                    try:
+                        fig, _ = draw_player_metric_per_zone(
+                            zona_individuali,
+                            FutsalPitch(),
+                            [metric],
+                            chi=giocatore,
+                            title=f"{giocatore} - Attacco {metric_label(metric)}",
+                            cmap=cm.OrRd,
+                            per_side=per_side_player_pdf,
+                        )
+                        fig.set_size_inches(4.0, 3.0)
+                        image_sections.append(
+                            PdfImageSection(
+                                f"Zone {giocatore} Attacco - {metric_label(metric)}",
+                                figure_to_png_bytes(fig),
+                                max_width=320,
+                            )
+                        )
+                        plt.close(fig)
+                    except Exception:
+                        continue
+
+                for metric in metriche.get("difesa", []):
+                    try:
+                        fig, _ = draw_player_metric_per_zone(
+                            zona_individuali,
+                            FutsalPitch(),
+                            [metric],
+                            chi=giocatore,
+                            title=f"{giocatore} - Difesa {metric_label(metric)}",
+                            cmap=cm.BuPu,
+                            per_side=per_side_player_pdf,
+                        )
+                        fig.set_size_inches(4.0, 3.0)
+                        image_sections.append(
+                            PdfImageSection(
+                                f"Zone {giocatore} Difesa - {metric_label(metric)}",
+                                figure_to_png_bytes(fig),
+                                max_width=320,
+                            )
+                        )
+                        plt.close(fig)
+                    except Exception:
+                        continue
+
+            pdf_bytes = generate_pdf_report(
+                export_title,
+                table_sections=pdf_table_sections,
+                image_sections=image_sections,
+                compact_tables=True,
+            )
+
+        st.download_button(
+            "⬇️ Scarica PDF",
+            data=pdf_bytes,
+            file_name=f"report_stats_{file_timestamp}.pdf",
+            mime="application/pdf",
+            key="download_stats_pdf",
+        )
+else:
+    st.info("Nessun dato disponibile per l'esportazione PDF.")

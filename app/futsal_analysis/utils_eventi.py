@@ -305,7 +305,14 @@ def calcola_stats_portieri_individuali(df, by_zona=False):
         portieri = portieri[portieri.str.strip() != ''].unique()
         for portiere in portieri:
             sub = df[df['portiere'] == portiere]
-            stats[portiere] = {k: len(sub[m(sub)]) for k, m in stat_keys_fn().items()}
+            portiere_stats = {k: len(sub[m(sub)]) for k, m in stat_keys_fn().items()}
+            mask_gol_subiti = (sub['evento'].str.contains('Gol', na=False)) & (sub['squadra'] == 'Loro')
+            gol_subiti = len(sub[mask_gol_subiti])
+            tiri_in_porta_subiti = portiere_stats.get('parate', 0) + gol_subiti
+            perc_parate = round((portiere_stats.get('parate', 0) / tiri_in_porta_subiti) * 100, 1) if tiri_in_porta_subiti > 0 else 0.0
+            portiere_stats['gol_subiti'] = gol_subiti
+            portiere_stats['percentuale_parate'] = perc_parate
+            stats[portiere] = portiere_stats
         return stats
 
 def calcola_stats_portieri_squadra(df, squadra='Noi'):
