@@ -5,18 +5,23 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 
 # Moduli locali
-from futsal_analysis.config_supabase import get_supabase_client
+from futsal_analysis.config_supabase import get_supabase_client, TABELLA_PARTITE, TABELLA_EVENTI
 from futsal_analysis.utils_time import *
 from futsal_analysis.utils_eventi import *
-from futsal_analysis.utils_minutaggi import *
-from futsal_analysis.pitch_drawer import FutsalPitch
-from futsal_analysis.zone_analysis import *
 from futsal_analysis.utils_pdf import (
-    PdfImageSection,
+    PdfMatchMeta,
     PdfTableSection,
-    figure_to_png_bytes,
     generate_pdf_report,
 )
+
+# --- MODULI DISATTIVATI (formato tagging 2026/27) ---
+# Minutaggi, zone e quartetti non sono piu' calcolabili: il CSV non contiene
+# piu' le colonne Quartetto / Piede e le zone (Dove/Lato) non vengono usate.
+# Import conservati per riattivarli rapidamente se il tagging cambia di nuovo.
+# from futsal_analysis.utils_minutaggi import *
+# from futsal_analysis.pitch_drawer import FutsalPitch
+# from futsal_analysis.zone_analysis import *
+# from futsal_analysis.utils_pdf import PdfImageSection, figure_to_png_bytes
 
 st.set_page_config(page_title="Analisi Partite", layout="wide", page_icon="⚽")
 
@@ -35,23 +40,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- VERIFICA CATEGORIA SELEZIONATA ---
 supabase = get_supabase_client()
 
-# Se non c'è una categoria in session_state, imposta un default
-if 'categoria_selezionata' not in st.session_state:
-    # Carica le categorie disponibili
-    res_all = supabase.table("partite").select("categoria").execute()
-    categorie_disponibili = sorted(list(set([p.get('categoria', 'Prima Squadra') for p in res_all.data if p.get('categoria')])))
-    st.session_state['categoria_selezionata'] = categorie_disponibili[0] if categorie_disponibili else 'Prima Squadra'
+# --- CATEGORIA FISSA: si lavora solo con la Prima Squadra ---
+# Il selettore multi-categoria (U15/U17/U19) e' stato rimosso: resta la costante
+# per continuare a filtrare le partite salvate a DB con questo valore.
+CATEGORIA = 'Prima Squadra'
+categoria_attiva = CATEGORIA
 
-categoria_attiva = st.session_state['categoria_selezionata']
+st.header("Tutte le partite disponibili")
 
-st.header(f"Tutte le partite disponibili - {categoria_attiva}")
-st.info(f"📂 Categoria attiva: **{categoria_attiva}** (modificabile dalla Homepage)")
-
-# --- Carica partite FILTRATE PER CATEGORIA ---
-res = supabase.table("partite").select("*").eq("categoria", categoria_attiva).order("data", desc=True).execute()
+# --- Carica partite ---
+res = supabase.table(TABELLA_PARTITE).select("*").eq("categoria", CATEGORIA).order("data", desc=True).execute()
 partite = res.data
 
 if not partite:
@@ -75,11 +75,8 @@ if "partita_scelta" not in st.session_state:
 partita_id = st.session_state["partita_scelta"]
 partita_info = next((p for p in partite if p["id"] == partita_id), None)
 
-# Controlla se la partita selezionata esiste ancora nella categoria corrente
 if partita_info is None:
-    st.error("⚠️ La partita selezionata non è più disponibile per la categoria corrente.")
-    st.info("💡 Prova a selezionare una partita diversa o cambia categoria dalla Homepage.")
-    # Rimuovi la partita selezionata dalla session_state
+    st.error("⚠️ La partita selezionata non è più disponibile.")
     if 'partita_scelta' in st.session_state:
         del st.session_state['partita_scelta']
     st.stop()
@@ -88,7 +85,7 @@ st.markdown("---")
 # st.subheader(f"Analisi di {partita_info['competizione'].capitalize()} vs {partita_info['avversario'].title()} — {partita_info['data']}")
 
 # --- Carica eventi della partita scelta ---
-eventi = supabase.table("eventi").select("*").eq("partita_id", partita_id).order("posizione").execute().data
+eventi = supabase.table(TABELLA_EVENTI).select("*").eq("partita_id", partita_id).order("posizione").execute().data
 df = pd.DataFrame(eventi)
 if df.empty:
     st.warning("Nessun evento trovato per questa partita.")
@@ -97,15 +94,16 @@ if df.empty:
 # --- Data cleaning/normalizzazione ---
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 df = df.copy()
-# Non convertire i NaN a 0, lasciarli come valori mancanti per l'analisi delle zone
-df['dove'] = pd.to_numeric(df.get('dove', None), errors='coerce').astype('Int64')
+# Le colonne dove/lato/piede/quartetto restano nel DB ma non vengono piu' usate:
+# nel tagging 2026/27 non sono attendibili, quindi nessuna analisi zonale.
+# df['dove'] = pd.to_numeric(df.get('dove', None), errors='coerce').astype('Int64')
 df['Periodo'] = tag_primo_secondo_tempo(df)
 df['tempoEffettivo'] = calcola_tempo_effettivo(df)
 df['tempoReale'] = calcola_tempo_reale(df)
 
 # --- RISULTATO ---
-gol_fatti = len(df[(df['evento'] == 'Gol') & (df['squadra'] == 'Noi')])
-gol_subiti = len(df[(df['evento'] == 'Gol') & (df['squadra'] == 'Loro')])
+gol_fatti = int(mask_gol(df, 'Noi').sum())
+gol_subiti = int(mask_gol(df, 'Loro').sum())
 st.markdown(f"## FMP **{gol_fatti}** – **{gol_subiti}** {partita_info['avversario'].title()}")
 
 score_pdf_table = pd.DataFrame({
@@ -123,6 +121,8 @@ if not gol_df.empty:
     gol_df['Minuto'] = gol_df['tempoEffettivo']  # Usa tempoEffettivo invece di tempoReale
     gol_df['Marcatore'] = gol_df['chi'].fillna('').str.title()
     gol_df['Squadra'] = gol_df['squadra']
+    # L'Esito dell'evento Gol e' la tipologia dell'azione (Costruzione, Transizione, ...)
+    gol_df['Tipo Azione'] = gol_df['esito'].fillna('').replace('', '—')
     # Ordina per minuto crescente (MM:SS) usando timedelta per evitare ordinamenti lessicografici
     try:
         gol_df['_minuto_td'] = pd.to_timedelta(gol_df['Minuto'].astype(str))
@@ -141,6 +141,7 @@ if not gol_df.empty:
                         <span style='font-size: 16px;'>⚽</span>
                         <span style='font-weight: bold; color: #1565c0; font-size: 12px;'>{row['Minuto']}'</span>
                         <span style='color: #1565c0; font-size: 12px;'>{row['Marcatore']}</span>
+                        <span style='color: #64748b; font-size: 11px;'>· {row['Tipo Azione']}</span>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -152,25 +153,30 @@ if not gol_df.empty:
                         <span style='font-size: 16px;'>❌</span>
                         <span style='font-weight: bold; color: #d32f2f; font-size: 12px;'>{row['Minuto']}'</span>
                         <span style='color: #d32f2f; font-size: 12px;'>Gol subito</span>
+                        <span style='color: #64748b; font-size: 11px;'>· {row['Tipo Azione']}</span>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-    timeline_pdf = gol_df[['Minuto', 'Squadra', 'Marcatore']]
+    timeline_pdf = gol_df[['Minuto', 'Squadra', 'Marcatore', 'Tipo Azione']]
     if not timeline_pdf.empty:
         pdf_table_sections.append(PdfTableSection("Timeline Gol", timeline_pdf.reset_index(drop=True)))
 
 # --- Calcola report eventi (necessario per tutti i tab) ---
 report_eventi = calcola_report_completo(df)
 
-# --- TABS DINAMICI BASATI SULLA CATEGORIA ---
-# Per u15/u17 nascondiamo Stats Individuali, Stats Quartetti e Minutaggi
-if categoria_attiva.lower() in ['u15', 'u17']:
-    tabs = st.tabs(["Stats Squadra", "Zone"])
-    tab_names = ["Stats Squadra", "Zone"]
-else:
-    tabs = st.tabs(["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
-    tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+# --- MODULI LEGATI AL VECCHIO FORMATO DI TAGGING ---
+# Il codice di quartetti, zone e minutaggi e' conservato integralmente piu' sotto
+# ma non viene eseguito. Per riattivarne uno: rimetti il flag a True, riabilita
+# gli import in cima al file e rimetti la voce in `tab_names`.
+ABILITA_QUARTETTI = False
+ABILITA_ZONE = False
+ABILITA_MINUTAGGI = False
+
+# --- TABS ---
+# tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+tab_names = ["Stats Squadra", "Top 5", "Stats Individuali"]
+tabs = st.tabs(tab_names)
 
 # === TAB 1: Stats Squadra ===
 
@@ -303,6 +309,45 @@ with tabs[0]:
             pdf_title="Stats Squadra - Falli",
         )
     
+    # Sezione Tipologia Gol (nuova: l'Esito dell'evento Gol e' il tipo di azione)
+    with st.expander("🎯 Come nascono i gol", expanded=False):
+        tipologia = report_eventi['tipologia_gol']
+        df_tipologia = pd.DataFrame({
+            'Fatti': tipologia['fatti'],
+            'Subiti': tipologia['subiti'],
+        })
+        # Nasconde le tipologie mai usate in questa partita
+        df_tipologia = df_tipologia[(df_tipologia['Fatti'] > 0) | (df_tipologia['Subiti'] > 0)]
+        if df_tipologia.empty:
+            st.info("Nessuna tipologia gol taggata in questa partita.")
+        else:
+            df_tipologia = format_index_names(df_tipologia)
+            st.dataframe(df_tipologia, use_container_width=True)
+            pdf_table_sections.append(PdfTableSection("Stats Squadra - Tipologia Gol", df_tipologia.copy()))
+
+    # Sezione Palle Inattive (volumi: senza esito collegato non calcoliamo l'efficacia)
+    with st.expander("🚩 Palle inattive", expanded=False):
+        inattive_stats = {}
+        for periodo, df_periodo in [
+            ('Totale', df),
+            ('1T', df[df['Periodo'] == 'Primo tempo']),
+            ('2T', df[df['Periodo'] == 'Secondo tempo']),
+        ]:
+            inattive_stats[periodo] = {
+                'angoli': int((mask_evento(df_periodo, 'Angolo') & (df_periodo['squadra'] == 'Noi')).sum()),
+                'angoli_subiti': int((mask_evento(df_periodo, 'Angolo') & (df_periodo['squadra'] == 'Loro')).sum()),
+                'laterali': int((mask_evento(df_periodo, 'Laterale') & (df_periodo['squadra'] == 'Noi')).sum()),
+                'laterali_subiti': int((mask_evento(df_periodo, 'Laterale') & (df_periodo['squadra'] == 'Loro')).sum()),
+                'punizioni': int((mask_evento(df_periodo, 'Punizione') & (df_periodo['squadra'] == 'Noi')).sum()),
+                'punizioni_subite': int((mask_evento(df_periodo, 'Punizione') & (df_periodo['squadra'] == 'Loro')).sum()),
+            }
+        render_section(
+            "Palle inattive",
+            inattive_stats,
+            show_title=False,
+            pdf_title="Stats Squadra - Palle Inattive",
+        )
+
     # Sezione Portieri
     with st.expander("🥅 Portieri", expanded=False):
         col_p1, col_p2 = st.columns(2)
@@ -421,6 +466,7 @@ if "Top 5" in tab_names:
         # Se è_calcolata=True, la statistica viene calcolata invece di essere letta direttamente
         top5_stats = [
             ('gol_fatti', 'Gol', False),
+            ('assist', 'Assist', False),
             ('tiri_totali', 'Tiri', False),
             ('tiri_in_porta_totali', 'Tiri in Porta', False),
             ('precisione_tiri', 'Precisione Tiri (%)', True),  # Calcolata: tiri_in_porta / tiri_totali * 100
@@ -490,8 +536,8 @@ if "Top 5" in tab_names:
                     st.markdown(f"**{stat_label}**")
                     st.dataframe(df_top5, use_container_width=True, hide_index=True)
 
-# === TAB 3: Stats Quartetti ===
-if "Stats Quartetti" in tab_names:
+# === TAB 3: Stats Quartetti === (disattivato: colonna Quartetto non piu' raccolta)
+if ABILITA_QUARTETTI and "Stats Quartetti" in tab_names:
     with tabs[tab_names.index("Stats Quartetti")]:
         st.header("Statistiche per quartetti")
         
@@ -600,8 +646,10 @@ if "Stats Quartetti" in tab_names:
             else:
                 st.info("Nessuna situazione con quinto uomo trovata nel secondo tempo.")
 
-# === TAB Zone ===
-with tabs[tab_names.index("Zone")]:
+# === TAB Zone === (disattivato: Dove/Lato non piu' attendibili nel tagging)
+zone_pdf_context = {}
+if ABILITA_ZONE and "Zone" in tab_names:
+  with tabs[tab_names.index("Zone")]:
     st.header("Analisi per zone di campo")
     campo = FutsalPitch()
     report_zona = calcola_report_zona(df)
@@ -752,8 +800,8 @@ with tabs[tab_names.index("Zone")]:
                     st.pyplot(fig)
 
 
-# === TAB Minutaggi ===
-if "Minutaggi" in tab_names:
+# === TAB Minutaggi === (disattivato: senza Quartetto non si sa chi era in campo)
+if ABILITA_MINUTAGGI and "Minutaggi" in tab_names:
     with tabs[tab_names.index("Minutaggi")]:
         st.header("Minutaggi")
         # Durata complessiva, 1T e 2T (tempo reale)
@@ -809,6 +857,8 @@ if st.button("📄 Genera PDF", key="generate_match_pdf"):
         def metric_label(name: str) -> str:
             return name.replace('_', ' ').title()
 
+        # Con ABILITA_ZONE=False `zone_pdf_context` resta vuoto e i cicli qui
+        # sotto non producono nessuna mappa: il PDF esce senza immagini.
         zona_report = zone_pdf_context.get("report_zona", {})
 
         # Sezioni squadra - attacco
@@ -910,10 +960,22 @@ if st.button("📄 Genera PDF", key="generate_match_pdf"):
 
         export_title = f"Report Partita - {partita_info['competizione'].title()} vs {partita_info['avversario'].title()} ({partita_info['data']})"
         file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        match_meta = PdfMatchMeta(
+            home_name="FMP",
+            away_name=str(partita_info.get("avversario", "Avversario")).title(),
+            home_goals=int(gol_fatti),
+            away_goals=int(gol_subiti),
+            competition=str(partita_info.get("competizione", "")).title(),
+            match_date=str(partita_info.get("data", "")),
+            category=str(categoria_attiva),
+        )
+        kpi_exec = report_eventi.get("kpi_executive") or calcola_kpi_executive(df)
         pdf_bytes = generate_pdf_report(
             export_title,
             table_sections=pdf_table_sections,
             image_sections=image_sections,
+            match_meta=match_meta,
+            kpi_executive=kpi_exec,
         )
 
     st.download_button(

@@ -1,5 +1,69 @@
 import pandas as pd
 
+# =========================================================================
+# FORMATO TAGGING 2026/27
+# -------------------------------------------------------------------------
+# Colonne CSV: Name;Position;Duration;Data;Evento;Portiere;Squadra;Chi;Dove;Lato;Esito
+# Rispetto al formato precedente non vengono piu raccolti:
+#   - Quartetto  -> niente stats quartetti / quinto uomo / minutaggi
+#   - Piede      -> niente split piede
+#   - Dove/Lato  -> zone non piu utilizzate (le colonne restano nel DB, ignorate)
+# Convenzioni del tagging:
+#   - 'Squadra' indica chi compie l'azione ('Noi'/'Loro'), 'Chi' e' sempre un
+#     nostro giocatore (marcatore, tiratore, chi ribatte, chi subisce il fallo).
+#   - Palla persa / Palla recuperata sono taggate solo per noi: 'Squadra' e' vuota.
+#   - Un 'Tiro' con Esito='Assist' e' un passaggio decisivo, NON una conclusione.
+#   - 'Punizione' ha esiti da conclusione ma non entra nei tiri: conta solo come
+#     parata per le statistiche dei portieri.
+#   - L'Esito di un 'Gol' e' la tipologia dell'azione che lo ha prodotto.
+# =========================================================================
+
+ESITI_IN_PORTA = ['Parata', 'Gol', 'Palo']
+TIPOLOGIE_GOL = ['Costruzione', 'Transizione', 'Palla inattiva', 'Errore']
+
+
+def _col(df, name):
+    """Serie stringa normalizzata per la colonna richiesta (vuota se assente)."""
+    if name not in df.columns:
+        return pd.Series([''] * len(df), index=df.index, dtype=object)
+    return df[name].fillna('').astype(str).str.strip()
+
+
+def mask_evento(df, nome):
+    return _col(df, 'evento').str.contains(nome, na=False)
+
+
+def mask_tiro(df, squadra=None):
+    """Conclusioni vere: esclude i Tiro taggati con Esito='Assist'."""
+    m = mask_evento(df, 'Tiro') & (_col(df, 'esito') != 'Assist')
+    if squadra is not None:
+        m = m & (_col(df, 'squadra') == squadra)
+    return m
+
+
+def mask_gol(df, squadra):
+    """Gol segnati da `squadra`, autogol avversario incluso."""
+    evento = _col(df, 'evento')
+    sq = _col(df, 'squadra')
+    avversario = 'Loro' if squadra == 'Noi' else 'Noi'
+    return ((evento == 'Gol') & (sq == squadra)) | ((evento == 'Autogol') & (sq == avversario))
+
+
+def mask_assist(df, squadra='Noi'):
+    """Assist: evento 'Assist' oppure Tiro con Esito='Assist'."""
+    m = (_col(df, 'evento') == 'Assist') | (mask_evento(df, 'Tiro') & (_col(df, 'esito') == 'Assist'))
+    sq = _col(df, 'squadra')
+    # Sull'evento Assist la colonna Squadra resta vuota: e' comunque un nostro tag.
+    return m & (sq != 'Loro') if squadra == 'Noi' else m & (sq == 'Loro')
+
+
+def mask_parata(df, squadra='Noi'):
+    """Parate del portiere di `squadra`: tiri e punizioni avversarie con Esito='Parata'."""
+    avversario = 'Loro' if squadra == 'Noi' else 'Noi'
+    conclusioni = (mask_evento(df, 'Tiro') | mask_evento(df, 'Punizione')) & (_col(df, 'squadra') == avversario)
+    return conclusioni & (_col(df, 'esito') == 'Parata')
+
+
 def _get_zonadict(df, group_key, stat_keys):
     """Restituisce dict: zona -> (chi/portiere/None) -> stats dict."""
     df = df.copy()
@@ -24,6 +88,8 @@ def _get_zonadict(df, group_key, stat_keys):
 # ----------- STATS DI SQUADRA -----------
 
 def calcola_attacco(df, by_zona=False):
+    # NOTA 2026/27: il ramo by_zona non e' piu usato dall'app (zone non raccolte).
+    # Resta qui per riuso futuro se il tagging delle zone tornera' attivo.
     mask_noi = (df['squadra'] == 'Noi') & (df['evento'].str.contains('Tiro|Laterale|Angolo', na=False))
     if by_zona:
         df_zona = df[mask_noi & (df['dove'].notnull())].copy()
@@ -40,18 +106,21 @@ def calcola_attacco(df, by_zona=False):
         return _get_zonadict(df_zona, group_key=None, stat_keys=stat_keys)
     else:
         stats = {}
-        mask_tiro = (df['evento'].str.contains('Tiro', na=False)) & (df['squadra'] == 'Noi')
-        mask_gol = (df['evento'].str.contains('Gol', na=False)) & (df['squadra'] == 'Noi')
-        stats['gol_fatti'] = len(df[mask_gol])
-        stats['tiri_totali'] = len(df[mask_tiro])
-        stats['tiri_in_porta'] = len(df[mask_tiro & df['esito'].isin(['Parata', 'Gol', 'Palo'])])
-        stats['tiri_fuori'] = len(df[mask_tiro & (df['esito'] == 'Fuori')])
-        stats['tiri_ribattuti'] = len(df[mask_tiro & (df['esito'] == 'Ribattuto')])
-        stats['palo_traversa'] = len(df[mask_tiro & (df['esito'] == 'Palo')])
-        stats['angoli'] = len(df[(df['evento'].str.contains('Angolo', na=False)) & (df['squadra'] == 'Noi')])
-        stats['laterali'] = len(df[(df['evento'].str.contains('Laterale', na=False)) & (df['squadra'] == 'Noi')])
-        stats['rigori'] = len(df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Noi')])
-        stats['tiri_liberi'] = len(df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Noi')])
+        m_tiro = mask_tiro(df, 'Noi')
+        esito = _col(df, 'esito')
+        squadra = _col(df, 'squadra')
+        stats['gol_fatti'] = int(mask_gol(df, 'Noi').sum())
+        stats['assist'] = int(mask_assist(df, 'Noi').sum())
+        stats['tiri_totali'] = int(m_tiro.sum())
+        stats['tiri_in_porta'] = int((m_tiro & esito.isin(ESITI_IN_PORTA)).sum())
+        stats['tiri_fuori'] = int((m_tiro & (esito == 'Fuori')).sum())
+        stats['tiri_ribattuti'] = int((m_tiro & (esito == 'Ribattuto')).sum())
+        stats['palo_traversa'] = int((m_tiro & (esito == 'Palo')).sum())
+        stats['angoli'] = int((mask_evento(df, 'Angolo') & (squadra == 'Noi')).sum())
+        stats['laterali'] = int((mask_evento(df, 'Laterale') & (squadra == 'Noi')).sum())
+        stats['punizioni'] = int((mask_evento(df, 'Punizione') & (squadra == 'Noi')).sum())
+        # stats['rigori'] = len(df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Noi')])
+        # stats['tiri_liberi'] = len(df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Noi')])
         return stats
 
 def calcola_difesa(df, by_zona=False):
@@ -72,18 +141,21 @@ def calcola_difesa(df, by_zona=False):
         return _get_zonadict(df_zona, group_key=None, stat_keys=stat_keys)
     else:
         stats = {}
-        mask_tiro = (df['evento'].str.contains('Tiro', na=False)) & (df['squadra'] == 'Loro')
-        mask_gol = (df['evento'].str.contains('Gol', na=False)) & (df['squadra'] == 'Loro')
-        stats['gol_subiti'] = len(df[mask_gol])
-        stats['tiri_subiti'] = len(df[mask_tiro])
-        stats['tiri_in_porta_subiti'] = len(df[mask_tiro & df['esito'].isin(['Parata', 'Gol', 'Palo'])])
-        stats['tiri_fuori_subiti'] = len(df[mask_tiro & (df['esito'] == 'Fuori')])
-        stats['tiri_loro_ribattuti_da_noi'] = len(df[mask_tiro & (df['esito'] == 'Ribattuto')])
-        stats['tiri_loro_palo_traversa'] = len(df[mask_tiro & (df['esito'] == 'Palo')])
-        stats['angoli_subiti'] = len(df[(df['evento'].str.contains('Angolo', na=False)) & (df['squadra'] == 'Loro')])
-        stats['laterali_subiti'] = len(df[(df['evento'].str.contains('Laterale', na=False)) & (df['squadra'] == 'Loro')])
-        stats['rigori_subiti'] = len(df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Loro')])
-        stats['tiri_liberi_subiti'] = len(df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Loro')])
+        m_tiro = mask_tiro(df, 'Loro')
+        esito = _col(df, 'esito')
+        squadra = _col(df, 'squadra')
+        stats['gol_subiti'] = int(mask_gol(df, 'Loro').sum())
+        stats['assist_subiti'] = int(mask_assist(df, 'Loro').sum())
+        stats['tiri_subiti'] = int(m_tiro.sum())
+        stats['tiri_in_porta_subiti'] = int((m_tiro & esito.isin(ESITI_IN_PORTA)).sum())
+        stats['tiri_fuori_subiti'] = int((m_tiro & (esito == 'Fuori')).sum())
+        stats['tiri_loro_ribattuti_da_noi'] = int((m_tiro & (esito == 'Ribattuto')).sum())
+        stats['tiri_loro_palo_traversa'] = int((m_tiro & (esito == 'Palo')).sum())
+        stats['angoli_subiti'] = int((mask_evento(df, 'Angolo') & (squadra == 'Loro')).sum())
+        stats['laterali_subiti'] = int((mask_evento(df, 'Laterale') & (squadra == 'Loro')).sum())
+        stats['punizioni_subite'] = int((mask_evento(df, 'Punizione') & (squadra == 'Loro')).sum())
+        # stats['rigori_subiti'] = len(df[(df['evento'].str.contains('Rigore', na=False)) & (df['squadra'] == 'Loro')])
+        # stats['tiri_liberi_subiti'] = len(df[(df['evento'].str.contains('Tiro libero', na=False)) & (df['squadra'] == 'Loro')])
         return stats
 
 def calcola_palle_recuperate_perse(df, by_zona=False):
@@ -169,28 +241,53 @@ def calcola_ripartenze(df):
     rip['ripartenze_loro'] = len(df[(df['evento'].str.contains('Ripartenza', na=False)) & (df['squadra'] == 'Loro')])
     return rip
 
+
+def calcola_tipologia_gol(df):
+    """Come nascono i gol: l'Esito dell'evento 'Gol' e' la tipologia dell'azione.
+
+    Restituisce {'fatti': {tipologia: n}, 'subiti': {tipologia: n}} con le
+    tipologie note sempre presenti (anche a 0) piu' eventuali nuove trovate nel dato.
+    """
+    evento = _col(df, 'evento')
+    esito = _col(df, 'esito')
+    squadra = _col(df, 'squadra')
+
+    tipologie = list(TIPOLOGIE_GOL)
+    for t in sorted(esito[(evento == 'Gol') & (esito != '')].unique()):
+        if t not in tipologie:
+            tipologie.append(t)
+
+    def conta(lato):
+        m_gol = (evento == 'Gol') & (squadra == lato)
+        conteggi = {t: int((m_gol & (esito == t)).sum()) for t in tipologie}
+        conteggi['non_taggato'] = int((m_gol & (esito == '')).sum())
+        return conteggi
+
+    return {'fatti': conta('Noi'), 'subiti': conta('Loro')}
+
 # ----------- STATS INDIVIDUALI -----------
 
 def calcola_stats_individuali(df, by_zona=False):
     def stat_keys_fn():
         return {
             # ATTACCO
-            'gol_fatti': lambda d: d['evento'].str.contains('Gol', na=False) & (d['squadra'] == 'Noi'),
-            'tiri_totali': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi'),
-            'tiri_in_porta_totali': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & d['esito'].isin(['Parata', 'Gol', 'Palo']),
-            'tiri_fuori': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Fuori'),
-            'tiri_ribattuti': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Ribattuto'),
-            'palo_traversa': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Noi') & (d['esito'] == 'Palo'),
-            # PALLE PERSE
-            'palle_perse': lambda d: d['evento'].str.contains('Palla persa', na=False),
+            'gol_fatti': lambda d: mask_gol(d, 'Noi'),
+            'assist': lambda d: mask_assist(d, 'Noi'),
+            'tiri_totali': lambda d: mask_tiro(d, 'Noi'),
+            'tiri_in_porta_totali': lambda d: mask_tiro(d, 'Noi') & _col(d, 'esito').isin(ESITI_IN_PORTA),
+            'tiri_fuori': lambda d: mask_tiro(d, 'Noi') & (_col(d, 'esito') == 'Fuori'),
+            'tiri_ribattuti': lambda d: mask_tiro(d, 'Noi') & (_col(d, 'esito') == 'Ribattuto'),
+            'palo_traversa': lambda d: mask_tiro(d, 'Noi') & (_col(d, 'esito') == 'Palo'),
+            # PALLE PERSE (taggate solo per noi: colonna Squadra vuota)
+            'palle_perse': lambda d: mask_evento(d, 'Palla persa'),
             # DIFESA
-            'tiri_ribattuti_noi': lambda d: d['evento'].str.contains('Tiro', na=False) & (d['squadra'] == 'Loro') & (d['esito'] == 'Ribattuto'),
-            'palle_recuperate': lambda d: d['evento'].str.contains('Palla recuperata', na=False),
+            'tiri_ribattuti_noi': lambda d: mask_tiro(d, 'Loro') & (_col(d, 'esito') == 'Ribattuto'),
+            'palle_recuperate': lambda d: mask_evento(d, 'Palla recuperata'),
             # FALLI
-            'falli_fatti': lambda d: d['evento'].str.contains('Fallo', na=False) & (d['squadra'] == 'Noi'),
-            'falli_subiti': lambda d: d['evento'].str.contains('Fallo', na=False) & (d['squadra'] == 'Loro'),
-            'ammonizioni': lambda d: d['evento'].str.contains('Ammonizione', na=False) & (d['squadra'] == 'Noi'),
-            'espulsioni': lambda d: d['evento'].str.contains('Espulsione', na=False) & (d['squadra'] == 'Noi'),
+            'falli_fatti': lambda d: mask_evento(d, 'Fallo') & (_col(d, 'squadra') == 'Noi'),
+            'falli_subiti': lambda d: mask_evento(d, 'Fallo') & (_col(d, 'squadra') == 'Loro'),
+            'ammonizioni': lambda d: mask_evento(d, 'Ammonizione') & (_col(d, 'squadra') == 'Noi'),
+            'espulsioni': lambda d: mask_evento(d, 'Espulsione') & (_col(d, 'squadra') == 'Noi'),
         }
 
     if by_zona:
@@ -229,71 +326,54 @@ def calcola_stats_individuali(df, by_zona=False):
                     zona_dict[giocatore]['gol_subiti'] = {'Sx': 0.0, 'Dx': 0.0, 'Tot': gol_subiti}
         return result
     else:
-        # Per tutti i giocatori, tutte le stats
+        # Un giocatore compare nelle stats individuali solo se ha almeno un evento
+        # nella colonna 'chi'. Senza quartetto non sappiamo piu' chi era in campo,
+        # quindi la colonna gol_subiti individuale non e' piu' calcolabile
+        # (resta disponibile per i portieri in calcola_stats_portieri_individuali).
         stats = {}
-        chi_list = df['chi'].dropna()
-        chi_list = chi_list[chi_list.str.strip() != ''].unique()
+        chi_series = _col(df, 'chi')
+        giocatori = sorted({c for c in chi_series.unique() if c})
 
-        # Raccogli anche tutti i giocatori presenti nel quartetto o come portiere
-        # (per includerli nelle stats anche se non hanno eventi nel campo chi)
-        all_players = set(chi_list)
-        quartetto_cols = ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3', 'quartetto_4',
-                         'quartetto.1', 'quartetto.2', 'quartetto.3', 'quartetto.4']
-        for col in quartetto_cols:
-            if col in df.columns:
-                players_in_col = df[col].dropna()
-                players_in_col = players_in_col[players_in_col.str.strip() != ''].unique()
-                all_players.update(players_in_col)
-        
-        # Aggiungi anche i portieri
-        if 'portiere' in df.columns:
-            portieri = df['portiere'].dropna()
-            portieri = portieri[portieri.str.strip() != ''].unique()
-            all_players.update(portieri)
+        for chi in giocatori:
+            sub = df[chi_series == chi]
+            stats[chi] = {k: int(m(sub).sum()) for k, m in stat_keys_fn().items()}
 
-        for chi in all_players:
-            sub = df[df['chi'] == chi]
-            stats[chi] = {k: len(sub[m(sub)]) for k, m in stat_keys_fn().items()}
-            
-            # Per gol_subiti, contiamo i gol subiti quando il giocatore è presente nel quartetto o come portiere
-            # (NON nel campo chi, perché i gol subiti non hanno chi)
-            def is_player_in_field_for_goal(row, player_name):
-                """Verifica se un giocatore è in campo (quartetto o portiere) quando viene subito un gol"""
-                # Controlla nel quartetto
-                for col in quartetto_cols:
-                    if col in row and pd.notna(row.get(col)):
-                        if str(row.get(col)).strip() == player_name:
-                            return True
-                # Controlla come portiere
-                if 'portiere' in row and pd.notna(row.get('portiere')):
-                    if str(row.get('portiere')).strip() == player_name:
-                        return True
-                return False
-            
-            # Conta i gol subiti quando il giocatore è presente nel quartetto o come portiere
-            gol_subiti = 0
-            for idx, row in df.iterrows():
-                if isinstance(row.get('evento'), str) and 'Gol' in row.get('evento', '') and \
-                   row.get('squadra') == 'Loro' and \
-                   is_player_in_field_for_goal(row, chi):
-                    gol_subiti += 1
-            
-            stats[chi]['gol_subiti'] = gol_subiti
+        # --- LEGACY (quartetto non piu' raccolto) -----------------------------
+        # I gol subiti individuali venivano attribuiti ai 4 giocatori in campo
+        # leggendo le colonne quartetto/quartetto_1..4. Codice conservato per un
+        # eventuale ritorno del tagging del quartetto.
+        #
+        # quartetto_cols = ['quartetto', 'quartetto_1', 'quartetto_2', 'quartetto_3', 'quartetto_4',
+        #                   'quartetto.1', 'quartetto.2', 'quartetto.3', 'quartetto.4']
+        # for chi in giocatori:
+        #     gol_subiti = 0
+        #     for _, row in df.iterrows():
+        #         if str(row.get('evento', '')) == 'Gol' and row.get('squadra') == 'Loro':
+        #             in_campo = any(
+        #                 str(row.get(col, '')).strip() == chi
+        #                 for col in quartetto_cols + ['portiere']
+        #             )
+        #             if in_campo:
+        #                 gol_subiti += 1
+        #     stats[chi]['gol_subiti'] = gol_subiti
+        # ---------------------------------------------------------------------
         return stats
 
 # ----------- STATS PORTIERI -----------
 
 def calcola_stats_portieri_individuali(df, by_zona=False):
+    # Le parate includono anche le punizioni avversarie con Esito='Parata'
+    # (l'evento Punizione non entra nei tiri, vedi mask_parata).
     def stat_keys_fn():
         return {
-            'parate': lambda d: ((d['evento'].str.contains('Parata', na=False)) & (d['squadra'] == 'Noi')) |
-                                ((d['evento'].str.contains('Tiro', na=False)) & (d['squadra'] == 'Loro') & (d['esito'] == 'Parata')),
-            'lanci': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi'),
-            'lanci_corretti': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Gol', 'OK'])),
-            'lanci_sbagliati': lambda d: (d['evento'].str.contains('Lancio', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori', '', None])),
-            'integrazione_portiere': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi'),
-            'integrazione_portiere_ok': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Gol', 'OK'])),
-            'integrazione_portiere_ko': lambda d: (d['evento'].str.contains('Integrazione portier', na=False)) & (d['squadra'] == 'Noi') & (d['esito'].isin(['Intercetto', 'Fuori', '', None])),
+            'parate': lambda d: mask_parata(d, 'Noi'),
+            # Lanci e integrazione portiere non sono piu' taggati: restano a 0.
+            # 'lanci': lambda d: mask_evento(d, 'Lancio') & (_col(d, 'squadra') == 'Noi'),
+            # 'lanci_corretti': lambda d: mask_evento(d, 'Lancio') & (_col(d, 'squadra') == 'Noi') & _col(d, 'esito').isin(['Gol', 'OK']),
+            # 'lanci_sbagliati': lambda d: mask_evento(d, 'Lancio') & (_col(d, 'squadra') == 'Noi') & _col(d, 'esito').isin(['Intercetto', 'Fuori', '']),
+            # 'integrazione_portiere': lambda d: mask_evento(d, 'Integrazione portier') & (_col(d, 'squadra') == 'Noi'),
+            # 'integrazione_portiere_ok': lambda d: mask_evento(d, 'Integrazione portier') & (_col(d, 'squadra') == 'Noi') & _col(d, 'esito').isin(['Gol', 'OK']),
+            # 'integrazione_portiere_ko': lambda d: mask_evento(d, 'Integrazione portier') & (_col(d, 'squadra') == 'Noi') & _col(d, 'esito').isin(['Intercetto', 'Fuori', '']),
         }
 
     if by_zona:
@@ -301,46 +381,41 @@ def calcola_stats_portieri_individuali(df, by_zona=False):
         return _get_zonadict(df[mask], group_key='portiere', stat_keys=stat_keys_fn())
     else:
         stats = {}
-        portieri = df['portiere'].dropna()
-        portieri = portieri[portieri.str.strip() != ''].unique()
-        for portiere in portieri:
-            sub = df[df['portiere'] == portiere]
-            portiere_stats = {k: len(sub[m(sub)]) for k, m in stat_keys_fn().items()}
-            mask_gol_subiti = (sub['evento'].str.contains('Gol', na=False)) & (sub['squadra'] == 'Loro')
-            gol_subiti = len(sub[mask_gol_subiti])
-            tiri_in_porta_subiti = portiere_stats.get('parate', 0) + gol_subiti
-            perc_parate = round((portiere_stats.get('parate', 0) / tiri_in_porta_subiti) * 100, 1) if tiri_in_porta_subiti > 0 else 0.0
+        portiere_series = _col(df, 'portiere')
+        for portiere in sorted({p for p in portiere_series.unique() if p}):
+            sub = df[portiere_series == portiere]
+            portiere_stats = {k: int(m(sub).sum()) for k, m in stat_keys_fn().items()}
+            gol_subiti = int(mask_gol(sub, 'Loro').sum())
+            parate = portiere_stats.get('parate', 0)
+            tiri_in_porta_subiti = parate + gol_subiti
             portiere_stats['gol_subiti'] = gol_subiti
-            portiere_stats['percentuale_parate'] = perc_parate
+            portiere_stats['tiri_in_porta_subiti'] = tiri_in_porta_subiti
+            portiere_stats['percentuale_parate'] = round((parate / tiri_in_porta_subiti) * 100, 1) if tiri_in_porta_subiti > 0 else 0.0
             stats[portiere] = portiere_stats
         return stats
 
 def calcola_stats_portieri_squadra(df, squadra='Noi'):
-    mask_sq = (df['squadra'] == squadra)
-    if squadra == 'Noi':
-        mask_parata = ((df['evento'].str.contains('Parata', na=False)) & mask_sq) | \
-                      ((df['evento'].str.contains('Tiro', na=False)) & (df['squadra'] == 'Loro') & (df['esito'] == 'Parata'))
-    else:
-        mask_parata = ((df['evento'].str.contains('Parata', na=False)) & mask_sq) | \
-                      ((df['evento'].str.contains('Tiro', na=False)) & (df['squadra'] == 'Noi') & (df['esito'] == 'Parata'))
-
-    mask_lancio = (df['evento'].str.contains('Lancio', na=False)) & mask_sq
-    mask_lancio_ok = mask_lancio & (df['esito'].isin(['Gol', 'OK']))
-    mask_lancio_ko = mask_lancio & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))
-
-    mask_int = (df['evento'].str.contains('Integrazione portier', na=False)) & mask_sq
-    mask_int_ok = mask_int & (df['esito'].isin(['Gol', 'OK']))
-    mask_int_ko = mask_int & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))
+    parate = int(mask_parata(df, squadra).sum())
+    gol_subiti = int(mask_gol(df, 'Loro' if squadra == 'Noi' else 'Noi').sum())
+    tiri_in_porta_subiti = parate + gol_subiti
 
     stats = {
-        'parate': len(df[mask_parata]),
-        'lanci': len(df[mask_lancio]),
-        'lanci_corretti': len(df[mask_lancio_ok]),
-        'lanci_sbagliati': len(df[mask_lancio_ko]),
-        'integrazione_portiere': len(df[mask_int]),
-        'integrazione_portiere_ok': len(df[mask_int_ok]),
-        'integrazione_portiere_ko': len(df[mask_int_ko])
+        'parate': parate,
+        'gol_subiti': gol_subiti,
+        'tiri_in_porta_subiti': tiri_in_porta_subiti,
+        'percentuale_parate': round((parate / tiri_in_porta_subiti) * 100, 1) if tiri_in_porta_subiti > 0 else 0.0,
     }
+
+    # LEGACY: lanci e integrazione portiere non sono piu' taggati.
+    # mask_sq = (df['squadra'] == squadra)
+    # mask_lancio = (df['evento'].str.contains('Lancio', na=False)) & mask_sq
+    # stats['lanci'] = len(df[mask_lancio])
+    # stats['lanci_corretti'] = len(df[mask_lancio & (df['esito'].isin(['Gol', 'OK']))])
+    # stats['lanci_sbagliati'] = len(df[mask_lancio & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))])
+    # mask_int = (df['evento'].str.contains('Integrazione portier', na=False)) & mask_sq
+    # stats['integrazione_portiere'] = len(df[mask_int])
+    # stats['integrazione_portiere_ok'] = len(df[mask_int & (df['esito'].isin(['Gol', 'OK']))])
+    # stats['integrazione_portiere_ko'] = len(df[mask_int & (df['esito'].isin(['Intercetto', 'Fuori', '', None]))])
     return stats
 
 
@@ -359,6 +434,63 @@ def _with_split(calc_fn, df):
         '2T': calc_fn(df_2t)
     }
 
+def _pct(numeratore, denominatore):
+    """Percentuale 0–100 arrotondata a 1 decimale; None se denominatore=0."""
+    if not denominatore:
+        return None
+    return round((numeratore / denominatore) * 100, 1)
+
+
+def calcola_kpi_executive(df):
+    """KPI executive Noi vs Loro per copertina / dashboard PDF."""
+    esito = _col(df, 'esito')
+    squadra = _col(df, 'squadra')
+
+    def side_stats(lato):
+        mask_sq = squadra == lato
+        m_tiro = mask_tiro(df, lato)
+        tiri = int(m_tiro.sum())
+        in_porta = int((m_tiro & esito.isin(ESITI_IN_PORTA)).sum())
+        gol = int(mask_gol(df, lato).sum())
+
+        # Palla persa / recuperata sono taggate solo per noi (Squadra vuota):
+        # attribuirle a 'Loro' non avrebbe senso, restano a 0 per l'avversario.
+        if lato == 'Noi':
+            recuperi = int(mask_evento(df, 'Palla recuperata').sum())
+            perse = int(mask_evento(df, 'Palla persa').sum())
+        else:
+            recuperi = None
+            perse = None
+
+        parate = int(mask_parata(df, lato).sum())
+        gol_subiti = int(mask_gol(df, 'Loro' if lato == 'Noi' else 'Noi').sum())
+
+        return {
+            'gol': gol,
+            'assist': int(mask_assist(df, lato).sum()),
+            'tiri': tiri,
+            'tiri_in_porta': in_porta,
+            'efficacia_tiro_pct': _pct(in_porta, tiri),
+            'conversione_pct': _pct(gol, in_porta),
+            'recuperi': recuperi,
+            'perse': perse,
+            'falli': int((mask_sq & mask_evento(df, 'Fallo')).sum()),
+            'gialli': int((mask_sq & mask_evento(df, 'Ammonizione')).sum()),
+            'rossi': int((mask_sq & mask_evento(df, 'Espulsione')).sum()),
+            'angoli': int((mask_sq & mask_evento(df, 'Angolo')).sum()),
+            'laterali': int((mask_sq & mask_evento(df, 'Laterale')).sum()),
+            'punizioni': int((mask_sq & mask_evento(df, 'Punizione')).sum()),
+            'parate': parate,
+            'perc_parate': _pct(parate, parate + gol_subiti),
+        }
+
+    return {
+        'Noi': side_stats('Noi'),
+        'Loro': side_stats('Loro'),
+        'tipologia_gol': calcola_tipologia_gol(df),
+    }
+
+
 def calcola_report_completo(df):
     """
     Restituisce tutte le statistiche aggregate in un unico dizionario strutturato:
@@ -376,6 +508,8 @@ def calcola_report_completo(df):
         'portieri_noi': _with_split(lambda d: calcola_stats_portieri_squadra(d, squadra='Noi'), df),
         'portieri_loro': _with_split(lambda d: calcola_stats_portieri_squadra(d, squadra='Loro'), df),
     }
+    report['kpi_executive'] = calcola_kpi_executive(df)
+    report['tipologia_gol'] = calcola_tipologia_gol(df)
 
     # STATS INDIVIDUALI GIOCATORI (dizionario)
     report['individuali'] = calcola_stats_individuali(df, by_zona=False)
@@ -405,6 +539,9 @@ def calcola_stats_quartetti(df):
     """
     Calcola le statistiche raggruppate per quartetto (4 giocatori di movimento).
     Esclude il portiere e le situazioni con 5 giocatori di movimento.
+
+    NON USATA nel formato 2026/27: la colonna Quartetto non viene piu' raccolta,
+    quindi la funzione restituirebbe sempre {}. Conservata per riuso futuro.
     """
     # Filtra solo le righe con 4 giocatori di movimento (escludi portiere)
     df_quartetti = df.copy()
@@ -497,6 +634,9 @@ def calcola_stats_quinto_uomo(df):
     """
     Calcola le statistiche per le situazioni con 5 giocatori di movimento (quinto uomo).
     Raggruppa le statistiche per ciascun quintetto di giocatori di movimento.
+
+    NON USATA nel formato 2026/27 (nessuna colonna Quartetto). Il power play si
+    legge dall'evento '5v4'. Conservata per riuso futuro.
     """
     df_quinto = df.copy()
 

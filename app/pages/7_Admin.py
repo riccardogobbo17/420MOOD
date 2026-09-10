@@ -1,10 +1,13 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
-from futsal_analysis.config_supabase import get_supabase_client
+from futsal_analysis.config_supabase import get_supabase_client, TABELLA_PARTITE, TABELLA_EVENTI
 
 # === CONFIG ===
 supabase = get_supabase_client()
+
+# Unica categoria gestita dall'app.
+CATEGORIA = "Prima Squadra"
 
 # === UTILS ===
 def to_id_partita(data, avversario):
@@ -21,7 +24,24 @@ def parse_data_sicura(data_str):
             return pd.NaT
 
 
+def rileva_separatore(file) -> str:
+    """Deduce il separatore dalla riga di intestazione.
+
+    L'export 2026/27 usa il punto e virgola, i CSV precedenti la virgola. Non si
+    puo' usare il dialect sniffer di pandas perche' nel vecchio formato il campo
+    Quartetto contiene a sua volta dei punti e virgola.
+    """
+    posizione = file.tell()
+    header = file.readline()
+    file.seek(posizione)
+    if isinstance(header, bytes):
+        header = header.decode("utf-8", errors="ignore")
+    return ";" if header.count(";") > header.count(",") else ","
+
+
 def preprocess_eventi(df: pd.DataFrame, partita_id: str, categoria: str = None) -> pd.DataFrame:
+    # `categoria` non serve piu' al preprocessing (prima distingueva il CSV
+    # semplificato di U15/U17); resta nella firma per compatibilita'.
     df = df.rename(columns={
         "Posizione": "posizione",
         "Position": "posizione",
@@ -40,32 +60,23 @@ def preprocess_eventi(df: pd.DataFrame, partita_id: str, categoria: str = None) 
 
     df["partita_id"] = partita_id
 
-    # Gestione diversa per categorie u15/u17 (CSV semplificato)
-    if categoria and categoria.lower() in ['u15', 'u17']:
-        # Per u15/u17, le colonne mancanti vengono impostate a stringa vuota
-        colonne_manche = ["portiere", "quartetto", "chi", "esito", "piede"]
-        for col in colonne_manche:
-            if col not in df.columns:
-                df[col] = ""
-        
-        # Non processare quartetto per u15/u17
-        split_cols = None
-    else:
-        # Gestione normale per Prima Squadra e U19
-        if "quartetto" in df.columns:
-            # splitto in massimo 5 colonne (0–4)
-            split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
+    # Dal formato 2026/27 il CSV non esporta piu' Quartetto e Piede. Le colonne
+    # restano nel DB (verranno salvate vuote) ma non vengono piu' usate a valle.
+    split_cols = None
+    if "quartetto" in df.columns:
+        # splitto in massimo 5 colonne (0–4)
+        split_cols = df["quartetto"].fillna("").astype(str).str.split(";", expand=True)
 
-            # sostituisco la colonna originale col primo giocatore
-            df["quartetto"] = split_cols[0].str.strip()
+        # sostituisco la colonna originale col primo giocatore
+        df["quartetto"] = split_cols[0].str.strip()
 
-        # creo le altre colonne (dal 2° giocatore in poi)
-        for i in range(1, 5):  # dal secondo fino al quinto
-            col_name = f"quartetto_{i}"
-            if split_cols is not None and i < split_cols.shape[1]:
-                df[col_name] = split_cols[i].str.strip()
-            else:
-                df[col_name] = None  # oppure "" se vuoi stringa vuota
+    # creo le altre colonne (dal 2° giocatore in poi)
+    for i in range(1, 5):  # dal secondo fino al quinto
+        col_name = f"quartetto_{i}"
+        if split_cols is not None and i < split_cols.shape[1]:
+            df[col_name] = split_cols[i].str.strip()
+        else:
+            df[col_name] = ""
 
     # Conversione data → YYYY-MM-DD
     if "data" in df.columns:
@@ -116,7 +127,9 @@ with st.form("nuova_partita"):
     data = st.date_input("Data partita")
     avversario = st.text_input("Avversario")
     competizione = st.text_input("Competizione")
-    categoria = st.text_input("Categoria", value="Prima Squadra")
+    # Si lavora solo con la Prima Squadra: la colonna resta a DB ma non e' piu'
+    # modificabile dal form (niente U15/U17/U19).
+    categoria = CATEGORIA
     yt_link = st.text_input("Link YouTube (opzionale)")
     submitted = st.form_submit_button("Salva partita")
 
@@ -125,20 +138,24 @@ with st.form("nuova_partita"):
             st.error("⚠️ Devi inserire almeno data e avversario.")
         else:
             partita_id = to_id_partita(str(data), avversario)
-            supabase.table("partite").insert({
+            # Il link YouTube e' opzionale: se il campo e' vuoto si manda None
+            # (colonna nullable a DB) invece della stringa vuota, cosi' le
+            # pagine a valle possono usare un semplice test di verita'.
+            yt_link_pulito = yt_link.strip() if yt_link else ""
+            supabase.table(TABELLA_PARTITE).insert({
                 "id": partita_id,
                 "data": str(data),
                 "avversario": avversario,
                 "competizione": competizione,
                 "categoria": categoria,
-                "yt_link": yt_link
+                "yt_link": yt_link_pulito or None
             }).execute()
             st.success(f"✅ Partita '{avversario}' inserita con ID {partita_id} nella categoria '{categoria}'")
 
 # --- SEZIONE 2: Upload CSV eventi ---
 st.header("📂 Carica eventi da CSV")
 
-partite = supabase.table("partite").select("id, avversario, data, categoria").order("data", desc=True).execute().data
+partite = supabase.table(TABELLA_PARTITE).select("id, avversario, data, categoria").order("data", desc=True).execute().data
 if not partite:
     st.warning("Nessuna partita trovata, crea prima una nuova partita.")
     st.stop()
@@ -165,7 +182,7 @@ if file and partita_scelta:
         'Squadra': str,
         'Lato': str
     }
-    df_raw = pd.read_csv(file, dtype=dtype_dict)
+    df_raw = pd.read_csv(file, dtype=dtype_dict, sep=rileva_separatore(file))
 
     # ✅ Preprocessing con categoria
     df = preprocess_eventi(df_raw, partita_id, categoria)
@@ -177,7 +194,7 @@ if file and partita_scelta:
     if st.button("Carica eventi nel DB"):
         batch_size = 500
         for i in range(0, len(eventi_data), batch_size):
-            supabase.table("eventi").insert(eventi_data[i:i+batch_size]).execute()
+            supabase.table(TABELLA_EVENTI).insert(eventi_data[i:i+batch_size]).execute()
         st.success(f"✅ Caricati {len(eventi_data)} eventi per la partita {partita_id}")
 
 # --- SEZIONE 3: Elimina eventi partita ---
@@ -200,7 +217,7 @@ if partita_elimina:
         
         # Conta gli eventi associati a questa partita
         try:
-            eventi_count = supabase.table("eventi").select("id", count="exact").eq("partita_id", partita_id_elimina).execute()
+            eventi_count = supabase.table(TABELLA_EVENTI).select("id", count="exact").eq("partita_id", partita_id_elimina).execute()
             num_eventi = eventi_count.count if eventi_count.count else 0
             st.warning(f"⚠️ Questa partita ha {num_eventi} eventi associati.")
         except Exception as e:
@@ -217,7 +234,7 @@ if partita_elimina:
     if conferma_elimina and st.button("🗑️ Elimina tutti gli eventi della partita", type="primary"):
         try:
             # Elimina solo tutti gli eventi associati alla partita
-            result_eventi = supabase.table("eventi").delete().eq("partita_id", partita_id_elimina).execute()
+            result_eventi = supabase.table(TABELLA_EVENTI).delete().eq("partita_id", partita_id_elimina).execute()
             
             st.success(f"✅ Eliminati con successo tutti gli eventi della partita '{partita_info['avversario']}' (la partita rimane nel sistema)")
             st.balloons()

@@ -5,19 +5,25 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 
 # Moduli locali
-from futsal_analysis.config_supabase import get_supabase_client
+from futsal_analysis.config_supabase import get_supabase_client, TABELLA_PARTITE, TABELLA_EVENTI
 from futsal_analysis.utils_time import *
 from futsal_analysis.utils_eventi import *
-from futsal_analysis.utils_minutaggi import *
-from futsal_analysis.pitch_drawer import FutsalPitch
-from futsal_analysis.zone_analysis import *
 from futsal_analysis.dashboard_utils import render_panoramica_stagione
 from futsal_analysis.utils_pdf import (
-    PdfImageSection,
     PdfTableSection,
-    figure_to_png_bytes,
     generate_pdf_report,
 )
+
+# --- MODULI DISATTIVATI (formato tagging 2026/27) ---
+# Vedi la nota in pages/1_partite.py: senza Quartetto e senza zone affidabili
+# non si calcolano minutaggi, quartetti e mappe di campo.
+# from futsal_analysis.utils_minutaggi import *
+# from futsal_analysis.pitch_drawer import FutsalPitch
+# from futsal_analysis.zone_analysis import *
+# from futsal_analysis.utils_pdf import PdfImageSection, figure_to_png_bytes
+ABILITA_QUARTETTI = False
+ABILITA_ZONE = False
+ABILITA_MINUTAGGI = False
 
 st.set_page_config(page_title="Stats Stagione", layout="wide", page_icon="📊")
 
@@ -52,31 +58,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- VERIFICA CATEGORIA SELEZIONATA ---
 supabase = get_supabase_client()
 
-# Se non c'è una categoria in session_state, imposta un default
-if 'categoria_selezionata' not in st.session_state:
-    # Carica le categorie disponibili
-    res_all = supabase.table("partite").select("categoria").execute()
-    categorie_disponibili = sorted(list(set([p.get('categoria', 'Prima Squadra') for p in res_all.data if p.get('categoria')])))
-    # Cerca "Campionato" come default, altrimenti usa la prima categoria disponibile
-    if 'Campionato' in categorie_disponibili:
-        st.session_state['categoria_selezionata'] = 'Campionato'
-    else:
-        st.session_state['categoria_selezionata'] = categorie_disponibili[0] if categorie_disponibili else 'Prima Squadra'
+# --- CATEGORIA E STAGIONE FISSE ---
+# Si lavora solo con la Prima Squadra: niente selettore di categoria.
+CATEGORIA = 'Prima Squadra'
+STAGIONE = '2026/27'
+categoria_attiva = CATEGORIA
 
-categoria_attiva = st.session_state['categoria_selezionata']
+st.header(f"📊 Statistiche di Stagione {STAGIONE}")
 
-st.header(f"📊 Statistiche di Stagione - {categoria_attiva}")
-st.info(f"📂 Categoria attiva: **{categoria_attiva}** (modificabile dalla Homepage)")
-
-# --- Carica tutte le partite FILTRATE PER CATEGORIA ---
-res = supabase.table("partite").select("*").eq("categoria", categoria_attiva).order("data", desc=True).execute()
+# --- Carica tutte le partite ---
+res = supabase.table(TABELLA_PARTITE).select("*").eq("categoria", CATEGORIA).order("data", desc=True).execute()
 partite = res.data
 
 if not partite:
-    st.warning(f"Nessuna partita trovata per la categoria '{categoria_attiva}'.")
+    st.warning("Nessuna partita trovata.")
     st.stop()
 
 # --- Multi-select per competizione ---
@@ -116,7 +113,7 @@ eventi_totali = []
 
 with st.spinner("Caricamento eventi in corso..."):
     for partita_id in partite_ids:
-        eventi_res = supabase.table("eventi").select("*").eq("partita_id", partita_id).order("posizione").execute()
+        eventi_res = supabase.table(TABELLA_EVENTI).select("*").eq("partita_id", partita_id).order("posizione").execute()
         if eventi_res.data:
             eventi_totali.extend(eventi_res.data)
 
@@ -130,7 +127,8 @@ df_all = pd.DataFrame(eventi_totali)
 # --- Data cleaning/normalizzazione ---
 df_all.columns = df_all.columns.str.strip().str.lower().str.replace(" ", "_")
 df_all = df_all.copy()
-df_all['dove'] = pd.to_numeric(df_all.get('dove', None), errors='coerce').fillna(0).astype(int)
+# Colonna 'dove' (zone) non piu' usata: resta nel DB ma non viene normalizzata.
+# df_all['dove'] = pd.to_numeric(df_all.get('dove', None), errors='coerce').fillna(0).astype(int)
 df_all['Periodo'] = tag_primo_secondo_tempo(df_all)
 df_all['tempoEffettivo'] = calcola_tempo_effettivo(df_all)
 df_all['tempoReale'] = calcola_tempo_reale(df_all)
@@ -570,20 +568,14 @@ def normalizza_stats_quartetti(df_stats, minutaggi_data):
     
     return df
 
-# --- Calcola minutaggi una volta per tutti i tabs (solo per categorie complete) ---
-if categoria_attiva.lower() not in ['u15', 'u17']:
-    minutaggi = aggrega_minutaggi_partite(partite_ids, df_all)
-else:
-    minutaggi = None
+# --- Minutaggi disattivati: senza Quartetto non si sa chi era in campo ---
+# minutaggi = aggrega_minutaggi_partite(partite_ids, df_all)
+minutaggi = None
 
-# --- TABS DINAMICI BASATI SULLA CATEGORIA ---
-# Per u15/u17 nascondiamo Stats Individuali, Stats Quartetti e Minutaggi
-if categoria_attiva.lower() in ['u15', 'u17']:
-    tabs = st.tabs(["Stats Squadra", "Zone"])
-    tab_names = ["Stats Squadra", "Zone"]
-else:
-    tabs = st.tabs(["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"])
-    tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+# --- TABS ---
+# tab_names = ["Stats Squadra", "Top 5", "Stats Individuali", "Stats Quartetti", "Zone", "Minutaggi"]
+tab_names = ["Stats Squadra", "Top 5", "Stats Individuali"]
+tabs = st.tabs(tab_names)
 
 # === TAB 1: Stats Squadra ===
 with tabs[0]:
@@ -646,6 +638,7 @@ if "Top 5" in tab_names:
         # Se è_calcolata=True, la statistica viene calcolata invece di essere letta direttamente
         top5_stats = [
             ('gol_fatti', 'Gol', False),
+            ('assist', 'Assist', False),
             ('tiri_totali', 'Tiri', False),
             ('tiri_in_porta_totali', 'Tiri in Porta', False),
             ('precisione_tiri', 'Precisione Tiri (%)', True),  # Calcolata: tiri_in_porta / tiri_totali * 100
@@ -718,123 +711,43 @@ if "Top 5" in tab_names:
 if "Stats Individuali" in tab_names:
     with tabs[tab_names.index("Stats Individuali")]:
         st.header("Statistiche individuali giocatori aggregate")
-        
-        def reorder_columns_gol(df):
-            """Riordina le colonne per mettere gol_subiti subito dopo gol_fatti"""
-            if df.empty:
-                return df
-            cols = list(df.columns)
-            if 'gol_fatti' in cols and 'gol_subiti' in cols:
-                # Trova l'indice di gol_fatti
-                idx_gol_fatti = cols.index('gol_fatti')
-                # Rimuovi gol_subiti dalla sua posizione attuale
-                cols.remove('gol_subiti')
-                # Inserisci gol_subiti subito dopo gol_fatti
-                cols.insert(idx_gol_fatti + 1, 'gol_subiti')
-                return df[cols]
-            return df
-        
-        with st.expander("👥 Giocatori - Totale", expanded=False):
-            df_tot = pd.DataFrame(report_eventi['individuali_split']['Totale']).T
-            # Normalizza le statistiche
-            df_tot = normalizza_stats_individuali(df_tot, minutaggi['totale'], tipo='giocatore')
-            # Riordina colonne: metti minuti_giocati all'inizio, poi stats grezze (con gol_subiti dopo gol_fatti), poi normalizzate
-            cols_grezze = [c for c in df_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c]
-            df_temp = df_tot[cols_grezze]
-            df_temp = reorder_columns_gol(df_temp)
-            cols_grezze_ordinate = list(df_temp.columns)
-            cols = ['minuti_giocati'] + cols_grezze_ordinate + [c for c in df_tot.columns if '_per_partita' in c]
-            # Riordina anche le colonne normalizzate (gol_subiti_per_partita dopo gol_fatti_per_partita)
-            cols_norm = [c for c in cols if '_per_partita' in c]
-            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
-                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
-                cols_norm.remove('gol_subiti_per_partita')
-                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
-            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
-            df_tot = df_tot[cols]
-            df_tot = format_column_names(df_tot)
-            df_tot = format_index_names(df_tot)
-            st.dataframe(df_tot, use_container_width=True)
-            if not df_tot.empty:
-                append_pdf_section("Stats Individuali - Totale", df_tot)
-        
-        with st.expander("👥 Giocatori - Primo Tempo", expanded=False):
-            df_1t = pd.DataFrame(report_eventi['individuali_split']['1T']).T
-            df_1t = normalizza_stats_individuali(df_1t, minutaggi['primo_tempo'], tipo='giocatore')
-            cols_grezze = [c for c in df_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c]
-            df_temp = df_1t[cols_grezze]
-            df_temp = reorder_columns_gol(df_temp)
-            cols_grezze_ordinate = list(df_temp.columns)
-            cols_norm = [c for c in df_1t.columns if '_per_partita' in c]
-            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
-                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
-                cols_norm.remove('gol_subiti_per_partita')
-                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
-            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
-            df_1t = df_1t[cols]
-            df_1t = format_column_names(df_1t)
-            df_1t = format_index_names(df_1t)
-            st.dataframe(df_1t, use_container_width=True)
-            if not df_1t.empty:
-                append_pdf_section("Stats Individuali - Primo Tempo", df_1t)
-        
-        with st.expander("👥 Giocatori - Secondo Tempo", expanded=False):
-            df_2t = pd.DataFrame(report_eventi['individuali_split']['2T']).T
-            df_2t = normalizza_stats_individuali(df_2t, minutaggi['secondo_tempo'], tipo='giocatore')
-            cols_grezze = [c for c in df_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c]
-            df_temp = df_2t[cols_grezze]
-            df_temp = reorder_columns_gol(df_temp)
-            cols_grezze_ordinate = list(df_temp.columns)
-            cols_norm = [c for c in df_2t.columns if '_per_partita' in c]
-            if 'gol_fatti_per_partita' in cols_norm and 'gol_subiti_per_partita' in cols_norm:
-                idx_gol_fatti_norm = cols_norm.index('gol_fatti_per_partita')
-                cols_norm.remove('gol_subiti_per_partita')
-                cols_norm.insert(idx_gol_fatti_norm + 1, 'gol_subiti_per_partita')
-            cols = ['minuti_giocati'] + cols_grezze_ordinate + cols_norm
-            df_2t = df_2t[cols]
-            df_2t = format_column_names(df_2t)
-            df_2t = format_index_names(df_2t)
-            st.dataframe(df_2t, use_container_width=True)
-            if not df_2t.empty:
-                append_pdf_section("Stats Individuali - Secondo Tempo", df_2t)
+        st.caption(
+            "Valori assoluti sulla stagione. La normalizzazione per 80 minuti non e' "
+            "piu' disponibile: senza la colonna Quartetto non si calcolano i minutaggi."
+        )
+
+        def mostra_tabella_individuale(titolo, dati, pdf_title):
+            with st.expander(titolo, expanded=False):
+                df_stat = pd.DataFrame(dati).T
+                if df_stat.empty:
+                    st.info("Nessun dato disponibile.")
+                    return
+                df_stat = df_stat.fillna(0).astype(int)
+                # LEGACY: normalizzazione per 80' basata sui minutaggi.
+                # df_stat = normalizza_stats_individuali(df_stat, minutaggi['totale'], tipo='giocatore')
+                df_stat = format_column_names(df_stat)
+                df_stat = format_index_names(df_stat)
+                st.dataframe(df_stat, use_container_width=True)
+                append_pdf_section(pdf_title, df_stat)
+
+        for titolo, chiave, pdf_title in [
+            ("\U0001F465 Giocatori - Totale", "Totale", "Stats Individuali - Totale"),
+            ("\U0001F465 Giocatori - Primo Tempo", "1T", "Stats Individuali - Primo Tempo"),
+            ("\U0001F465 Giocatori - Secondo Tempo", "2T", "Stats Individuali - Secondo Tempo"),
+        ]:
+            mostra_tabella_individuale(titolo, report_eventi['individuali_split'][chiave], pdf_title)
 
         st.header("Statistiche portieri individuali aggregate")
-        
-        with st.expander("🥅 Portieri - Totale", expanded=False):
-            df_port_tot = pd.DataFrame(report_eventi['portieri_individuali_split']['Totale']).T
-            df_port_tot = normalizza_stats_individuali(df_port_tot, minutaggi['totale'], tipo='portiere')
-            cols = ['minuti_giocati'] + [c for c in df_port_tot.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_tot.columns if '_per_partita' in c]
-            df_port_tot = df_port_tot[cols]
-            df_port_tot = format_column_names(df_port_tot)
-            df_port_tot = format_index_names(df_port_tot)
-            st.dataframe(df_port_tot, use_container_width=True)
-            if not df_port_tot.empty:
-                append_pdf_section("Stats Portieri Individuali - Totale", df_port_tot)
-        
-        with st.expander("🥅 Portieri - Primo Tempo", expanded=False):
-            df_port_1t = pd.DataFrame(report_eventi['portieri_individuali_split']['1T']).T
-            df_port_1t = normalizza_stats_individuali(df_port_1t, minutaggi['primo_tempo'], tipo='portiere')
-            cols = ['minuti_giocati'] + [c for c in df_port_1t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_1t.columns if '_per_partita' in c]
-            df_port_1t = df_port_1t[cols]
-            df_port_1t = format_column_names(df_port_1t)
-            df_port_1t = format_index_names(df_port_1t)
-            st.dataframe(df_port_1t, use_container_width=True)
-            if not df_port_1t.empty:
-                append_pdf_section("Stats Portieri Individuali - Primo Tempo", df_port_1t)
-        
-        with st.expander("🥅 Portieri - Secondo Tempo", expanded=False):
-            df_port_2t = pd.DataFrame(report_eventi['portieri_individuali_split']['2T']).T
-            df_port_2t = normalizza_stats_individuali(df_port_2t, minutaggi['secondo_tempo'], tipo='portiere')
-            cols = ['minuti_giocati'] + [c for c in df_port_2t.columns if c != 'minuti_giocati' and '_per_partita' not in c] + [c for c in df_port_2t.columns if '_per_partita' in c]
-            df_port_2t = df_port_2t[cols]
-            df_port_2t = format_column_names(df_port_2t)
-            df_port_2t = format_index_names(df_port_2t)
-            st.dataframe(df_port_2t, use_container_width=True)
-            if not df_port_2t.empty:
-                append_pdf_section("Stats Portieri Individuali - Secondo Tempo", df_port_2t)
 
-# === TAB 4: Stats Quartetti ===
-if "Stats Quartetti" in tab_names:
+        for titolo, chiave, pdf_title in [
+            ("\U0001F945 Portieri - Totale", "Totale", "Stats Portieri Individuali - Totale"),
+            ("\U0001F945 Portieri - Primo Tempo", "1T", "Stats Portieri Individuali - Primo Tempo"),
+            ("\U0001F945 Portieri - Secondo Tempo", "2T", "Stats Portieri Individuali - Secondo Tempo"),
+        ]:
+            mostra_tabella_individuale(titolo, report_eventi['portieri_individuali_split'][chiave], pdf_title)
+
+# === TAB 4: Stats Quartetti === (disattivato: colonna Quartetto non piu' raccolta)
+if ABILITA_QUARTETTI and "Stats Quartetti" in tab_names:
     with tabs[tab_names.index("Stats Quartetti")]:
         st.header("Statistiche per quartetti aggregate")
         
@@ -924,7 +837,8 @@ if "Stats Quartetti" in tab_names:
                 st.info("Nessuna situazione con quinto uomo trovata nel secondo tempo.")
 
 # === TAB Zone ===
-with tabs[tab_names.index("Zone")]:
+if ABILITA_ZONE and "Zone" in tab_names:
+  with tabs[tab_names.index("Zone")]:
     st.header("Analisi per zone di campo aggregate")
     campo = FutsalPitch()
     report_zona = calcola_report_zona(df_all)
@@ -1072,7 +986,7 @@ with tabs[tab_names.index("Zone")]:
                 st.info("Nessun giocatore trovato.")
 
 # === TAB Minutaggi ===
-if "Minutaggi" in tab_names:
+if ABILITA_MINUTAGGI and "Minutaggi" in tab_names:
     with tabs[tab_names.index("Minutaggi")]:
         st.header("Minutaggi aggregati")
         
@@ -1114,7 +1028,7 @@ if pdf_table_sections or has_zone_pdf_content:
     if st.button("📄 Genera PDF", key="generate_stats_pdf"):
         with st.spinner("Generazione report PDF in corso..."):
             file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-            export_title = f"Report Stagione - {categoria_attiva} ({competizioni_label})"
+            export_title = f"Report Stagione {STAGIONE} ({competizioni_label})"
             image_sections = []
 
             def metric_label(name: str) -> str:

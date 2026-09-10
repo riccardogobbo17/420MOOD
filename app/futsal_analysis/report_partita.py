@@ -1,0 +1,679 @@
+"""Report PDF della singola partita, con layout dedicato.
+
+Modulo volutamente indipendente da Streamlit: dipende solo da pandas,
+matplotlib e reportlab. Puo' essere richiamato dalla pagina 1_partite oppure
+da riga di comando (vedi app/scripts/genera_report.py), cosi' il report resta
+lavorabile anche senza far partire l'app.
+
+Struttura del PDF (A4 verticale, 3 pagine):
+    1. Copertina + confronto KPI a barre + come nascono i gol
+    2. Andamento partita (tiri e gol per fasce di 5 minuti) + timeline gol
+    3. Scheda giocatori + portieri
+
+Il DataFrame in ingresso e' quello degli eventi con le colonne minuscole
+(evento, squadra, chi, esito, portiere, posizione). Se mancano 'Periodo' e
+'tempoEffettivo' vengono calcolati qui.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from io import BytesIO
+from typing import List, Optional, Sequence
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import (
+    Image,
+    KeepTogether,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+from .utils_eventi import (
+    calcola_kpi_executive,
+    calcola_stats_individuali,
+    calcola_stats_portieri_individuali,
+    calcola_tipologia_gol,
+    mask_gol,
+    mask_tiro,
+)
+from .utils_time import calcola_tempo_effettivo, tag_primo_secondo_tempo
+
+# --- Palette -------------------------------------------------------------
+BLU = "#1565c0"
+BLU_SCURO = "#0d47a1"
+GRIGIO = "#94a3b8"
+GRIGIO_SCURO = "#475569"
+ROSSO = "#b91c1c"
+INCHIOSTRO = "#0f172a"
+TENUE = "#64748b"
+BORDO = "#cbd5e1"
+RIGA_ALT = "#f8fafc"
+
+DURATA_TEMPO_MIN = 20  # minuti effettivi per tempo
+AMPIEZZA_FASCIA_MIN = 5
+
+
+@dataclass
+class MetaPartita:
+    """Intestazione del report."""
+
+    avversario: str = "Avversario"
+    competizione: str = ""
+    data: str = ""
+    casa: str = "FMP"
+    categoria: str = "Prima Squadra"
+
+
+# =========================================================================
+# Preparazione dati
+# =========================================================================
+
+# Colonne calcolate da utils_time: hanno un nome in camelCase da preservare.
+COLONNE_TEMPO = ("Periodo", "tempoEffettivo", "tempoReale")
+
+
+def prepara_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalizza i nomi delle colonne e aggiunge Periodo/tempoEffettivo se mancanti."""
+    df = df.copy()
+    df = df.rename(columns={
+        c: str(c).strip().lower().replace(" ", "_")
+        for c in df.columns if c not in COLONNE_TEMPO
+    })
+    if "Periodo" not in df.columns:
+        df["Periodo"] = tag_primo_secondo_tempo(df)
+    if "tempoEffettivo" not in df.columns:
+        df["tempoEffettivo"] = calcola_tempo_effettivo(df)
+    return df
+
+
+def _mmss_in_minuti(valore) -> Optional[float]:
+    """Converte 'MM:SS' in minuti decimali; None se non interpretabile."""
+    testo = str(valore).strip()
+    if not testo or ":" not in testo:
+        return None
+    try:
+        parti = [int(p) for p in testo.split(":")]
+    except ValueError:
+        return None
+    if len(parti) != 2:
+        return None
+    return parti[0] + parti[1] / 60
+
+
+def _minuti_evento(df: pd.DataFrame, mask) -> List[float]:
+    """Minuti effettivi degli eventi selezionati, scartando quelli non datati."""
+    if "tempoEffettivo" not in df.columns:
+        return []
+    minuti = [_mmss_in_minuti(v) for v in df.loc[mask, "tempoEffettivo"]]
+    return [m for m in minuti if m is not None]
+
+
+def _fmt(valore, percentuale: bool = False) -> str:
+    if valore is None or (isinstance(valore, float) and pd.isna(valore)):
+        return "—"
+    if percentuale:
+        numero = float(valore)
+        return f"{numero:.0f}%" if numero.is_integer() else f"{numero:.1f}%"
+    if isinstance(valore, float):
+        return str(int(valore)) if valore.is_integer() else f"{valore:.1f}"
+    return str(valore)
+
+
+# =========================================================================
+# Grafici
+# =========================================================================
+
+# (etichetta, chiave in kpi_executive, e' una percentuale)
+VOCI_CONFRONTO = [
+    ("Gol", "gol", False),
+    ("Assist", "assist", False),
+    ("Tiri totali", "tiri", False),
+    ("Tiri in porta", "tiri_in_porta", False),
+    ("Efficacia tiro", "efficacia_tiro_pct", True),
+    ("Conversione", "conversione_pct", True),
+    ("Parate", "parate", False),
+    ("% Parate", "perc_parate", True),
+    ("Angoli", "angoli", False),
+    ("Laterali", "laterali", False),
+    ("Punizioni", "punizioni", False),
+    ("Falli", "falli", False),
+]
+
+
+# Banda centrale riservata alle etichette e lunghezza massima delle barre,
+# in unita' dell'asse x.
+CORSIA_ETICHETTE = 0.34
+LUNGHEZZA_BARRA = 1.0
+
+
+def _figura_confronto(kpi: dict, casa: str, ospite: str) -> plt.Figure:
+    """Barre divergenti Noi (sinistra) vs Loro (destra), una riga per KPI.
+
+    Ogni riga e' normalizzata sul valore piu' alto della coppia, cosi' la barra
+    piena indica sempre chi comanda quella voce. Le etichette stanno in una
+    corsia centrale, i valori alle estremita' delle barre.
+    """
+    noi, loro = kpi.get("Noi", {}), kpi.get("Loro", {})
+    voci = [
+        (etichetta, noi.get(chiave), loro.get(chiave), pct)
+        for etichetta, chiave, pct in VOCI_CONFRONTO
+        if noi.get(chiave) is not None or loro.get(chiave) is not None
+    ]
+
+    altezza = max(2.4, 0.38 * len(voci) + 0.8)
+    fig, ax = plt.subplots(figsize=(7.4, altezza))
+
+    for y, (etichetta, v_noi, v_loro, pct) in enumerate(voci):
+        a = float(v_noi or 0)
+        b = float(v_loro or 0)
+        scala = max(a, b) or 1.0
+        len_noi = a / scala * LUNGHEZZA_BARRA
+        len_loro = b / scala * LUNGHEZZA_BARRA
+
+        ax.barh(y, -len_noi, left=-CORSIA_ETICHETTE, height=0.5, color=BLU, zorder=3)
+        ax.barh(y, len_loro, left=CORSIA_ETICHETTE, height=0.5, color=GRIGIO, zorder=3)
+
+        ax.text(-CORSIA_ETICHETTE - len_noi - 0.03, y, _fmt(v_noi, pct),
+                ha="right", va="center", fontsize=8.5, fontweight="bold",
+                color=BLU_SCURO, zorder=4)
+        ax.text(CORSIA_ETICHETTE + len_loro + 0.03, y, _fmt(v_loro, pct),
+                ha="left", va="center", fontsize=8.5, fontweight="bold",
+                color=GRIGIO_SCURO, zorder=4)
+        ax.text(0, y, etichetta, ha="center", va="center", fontsize=7.5,
+                color=GRIGIO_SCURO, zorder=4)
+
+    margine = CORSIA_ETICHETTE + LUNGHEZZA_BARRA + 0.24
+    ax.set_xlim(-margine, margine)
+    ax.set_ylim(len(voci) - 0.4, -1.1)
+    ax.set_yticks([])
+    ax.set_xticks([])
+    for lato in ("top", "right", "bottom", "left"):
+        ax.spines[lato].set_visible(False)
+
+    intestazione = CORSIA_ETICHETTE + LUNGHEZZA_BARRA / 2
+    ax.text(-intestazione, -0.95, casa.upper(), ha="center", va="center",
+            fontsize=10, fontweight="bold", color=BLU)
+    ax.text(intestazione, -0.95, ospite.upper(), ha="center", va="center",
+            fontsize=10, fontweight="bold", color=GRIGIO_SCURO)
+
+    fig.tight_layout(pad=0.4)
+    return fig
+
+
+def _figura_andamento(df: pd.DataFrame, casa: str, ospite: str) -> Optional[plt.Figure]:
+    """Tiri per fasce di 5 minuti (noi sopra, loro sotto) con i gol evidenziati."""
+    tiri_noi = _minuti_evento(df, mask_tiro(df, "Noi"))
+    tiri_loro = _minuti_evento(df, mask_tiro(df, "Loro"))
+    gol_noi = _minuti_evento(df, mask_gol(df, "Noi"))
+    gol_loro = _minuti_evento(df, mask_gol(df, "Loro"))
+
+    if not (tiri_noi or tiri_loro or gol_noi or gol_loro):
+        return None
+
+    durata = 2 * DURATA_TEMPO_MIN
+    bordi = list(range(0, durata + AMPIEZZA_FASCIA_MIN, AMPIEZZA_FASCIA_MIN))
+    centri = [(bordi[i] + bordi[i + 1]) / 2 for i in range(len(bordi) - 1)]
+
+    def per_fascia(minuti: Sequence[float]) -> List[int]:
+        conteggi = [0] * (len(bordi) - 1)
+        for m in minuti:
+            indice = min(int(m // AMPIEZZA_FASCIA_MIN), len(conteggi) - 1)
+            conteggi[max(indice, 0)] += 1
+        return conteggi
+
+    conteggi_noi = per_fascia(tiri_noi)
+    conteggi_loro = per_fascia(tiri_loro)
+
+    fig, ax = plt.subplots(figsize=(7.4, 3.1))
+    ax.bar(centri, conteggi_noi, width=AMPIEZZA_FASCIA_MIN * 0.82,
+           color=BLU, label=f"Tiri {casa}", zorder=3)
+    ax.bar(centri, [-c for c in conteggi_loro], width=AMPIEZZA_FASCIA_MIN * 0.82,
+           color=GRIGIO, label=f"Tiri {ospite}", zorder=3)
+
+    limite = max([1] + conteggi_noi + conteggi_loro)
+    # I gol vanno su due corsie dedicate, appena oltre la barra piu' alta.
+    corsia = limite + 1.0
+    for m in gol_noi:
+        ax.plot([m], [corsia], marker="o", markersize=7, color=BLU_SCURO, zorder=5)
+    for m in gol_loro:
+        ax.plot([m], [-corsia], marker="o", markersize=7, color=ROSSO, zorder=5)
+
+    # Separatore fra primo e secondo tempo
+    ax.axvline(DURATA_TEMPO_MIN, color=BORDO, linewidth=1.0, linestyle="--", zorder=2)
+    ax.text(DURATA_TEMPO_MIN, corsia + 0.6, "intervallo", ha="center", va="bottom",
+            fontsize=7, color=TENUE)
+
+    ax.axhline(0, color=BORDO, linewidth=0.8, zorder=2)
+    ax.set_xlim(0, durata)
+    ax.set_ylim(-corsia - 0.9, corsia + 1.8)
+    ax.set_xticks(bordi)
+    ax.set_xticklabels([f"{b}'" for b in bordi], fontsize=7.5, color=TENUE)
+    passi = range(-limite, limite + 1, max(1, limite // 3))
+    ax.set_yticks(list(passi))
+    ax.set_yticklabels([str(abs(v)) for v in passi], fontsize=7.5, color=TENUE)
+    ax.set_ylabel("tiri", fontsize=7.5, color=TENUE)
+    ax.grid(axis="y", color="#eef2f7", linewidth=0.7, zorder=1)
+    ax.set_axisbelow(True)
+    for lato in ("top", "right", "left"):
+        ax.spines[lato].set_visible(False)
+    ax.spines["bottom"].set_color(BORDO)
+
+    # Legenda sotto l'asse: sopra le barre coprirebbe i pallini dei gol.
+    ax.legend(
+        handles=[
+            Patch(facecolor=BLU, label=f"Tiri {casa}"),
+            Patch(facecolor=GRIGIO, label=f"Tiri {ospite}"),
+            Line2D([], [], marker="o", linestyle="none", color=BLU_SCURO,
+                   label=f"Gol {casa}"),
+            Line2D([], [], marker="o", linestyle="none", color=ROSSO,
+                   label=f"Gol {ospite}"),
+        ],
+        loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=4,
+        fontsize=7.5, frameon=False, handlelength=1.2, columnspacing=1.6,
+    )
+
+    fig.tight_layout(pad=0.4)
+    return fig
+
+
+def _immagine(fig: plt.Figure, larghezza: float, dpi: int = 200) -> Image:
+    """Converte una figura matplotlib in un flowable Image della larghezza data."""
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=dpi, bbox_inches="tight",
+                facecolor="white")
+    plt.close(fig)
+    buffer.seek(0)
+    larghezza_px, altezza_px = fig.get_size_inches() * dpi
+    return Image(buffer, width=larghezza,
+                 height=larghezza * altezza_px / larghezza_px)
+
+
+# =========================================================================
+# Stili e blocchi tabellari
+# =========================================================================
+
+def _stili() -> dict:
+    base = getSampleStyleSheet()["Normal"]
+    return {
+        "brand": ParagraphStyle("Brand", parent=base, fontName="Helvetica-Bold",
+                                fontSize=12, textColor=colors.HexColor(BLU),
+                                alignment=1, spaceAfter=3),
+        "meta": ParagraphStyle("Meta", parent=base, fontSize=8.5,
+                               textColor=colors.HexColor(TENUE), alignment=1),
+        "squadra": ParagraphStyle("Squadra", parent=base, fontName="Helvetica-Bold",
+                                  fontSize=13, textColor=colors.HexColor(INCHIOSTRO),
+                                  alignment=1),
+        "punteggio": ParagraphStyle("Punteggio", parent=base, fontName="Helvetica-Bold",
+                                    fontSize=30, textColor=colors.HexColor(INCHIOSTRO),
+                                    alignment=1, leading=34),
+        "sezione": ParagraphStyle("Sezione", parent=base, fontName="Helvetica-Bold",
+                                  fontSize=9.5, textColor=colors.HexColor(BLU),
+                                  spaceBefore=2, spaceAfter=6),
+        "cella": ParagraphStyle("Cella", parent=base, fontSize=7.5,
+                                textColor=colors.HexColor(GRIGIO_SCURO), alignment=1),
+        "nota": ParagraphStyle("Nota", parent=base, fontSize=6.8,
+                               textColor=colors.HexColor(GRIGIO),
+                               spaceBefore=6, leading=9),
+    }
+
+
+def _stile_tabella(prima_colonna_a_sinistra: bool = True) -> TableStyle:
+    comandi = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BLU)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor(INCHIOSTRO)),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor(RIGA_ALT)]),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor(BORDO)),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+    ]
+    if prima_colonna_a_sinistra:
+        comandi.append(("ALIGN", (0, 0), (0, -1), "LEFT"))
+    return TableStyle(comandi)
+
+
+def _tabella(intestazioni: Sequence[str], righe: Sequence[Sequence[str]],
+             larghezze: Sequence[float]) -> Table:
+    tabella = Table([list(intestazioni)] + [list(r) for r in righe],
+                    colWidths=list(larghezze), hAlign="LEFT", repeatRows=1)
+    tabella.setStyle(_stile_tabella())
+    return tabella
+
+
+# =========================================================================
+# Pagine
+# =========================================================================
+
+def _pagina_executive(df, meta, kpi, stili, larghezza) -> List:
+    elementi: List = []
+    gol_casa = int(mask_gol(df, "Noi").sum())
+    gol_ospite = int(mask_gol(df, "Loro").sum())
+    avversario = meta.avversario.title()
+
+    elementi.append(Paragraph(f"{meta.casa} MATCH REPORT", stili["brand"]))
+    dettagli = [d for d in (meta.competizione, meta.data, meta.categoria) if d]
+    if dettagli:
+        elementi.append(Paragraph(" · ".join(dettagli), stili["meta"]))
+    elementi.append(Spacer(1, 9))
+
+    punteggio = Table(
+        [[
+            Paragraph(meta.casa, stili["squadra"]),
+            Paragraph(f"{gol_casa}  –  {gol_ospite}", stili["punteggio"]),
+            Paragraph(avversario, stili["squadra"]),
+        ]],
+        colWidths=[larghezza * 0.33, larghezza * 0.34, larghezza * 0.33],
+    )
+    punteggio.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(RIGA_ALT)),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor(BORDO)),
+        ("LINEBEFORE", (1, 0), (1, 0), 0.5, colors.HexColor(BORDO)),
+        ("LINEAFTER", (1, 0), (1, 0), 0.5, colors.HexColor(BORDO)),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    elementi.append(punteggio)
+    elementi.append(Spacer(1, 14))
+
+    elementi.append(Paragraph("CONFRONTO DIRETTO", stili["sezione"]))
+    elementi.append(_immagine(_figura_confronto(kpi, meta.casa, avversario), larghezza))
+
+    # Palle perse e recuperi sono taggati solo per noi: fuori dal confronto.
+    noi = kpi.get("Noi", {})
+    solo_nostri = [("Palle recuperate", noi.get("recuperi")),
+                   ("Palle perse", noi.get("perse"))]
+    if any(v for _, v in solo_nostri):
+        elementi.append(Spacer(1, 10))
+        blocco = _tabella(
+            [f"Solo {meta.casa}", "Totale"],
+            [[etichetta, _fmt(valore)] for etichetta, valore in solo_nostri],
+            [larghezza * 0.30, larghezza * 0.14],
+        )
+        tipologia = _blocco_tipologia_gol(kpi, meta, stili, larghezza * 0.50)
+        affiancate = Table([[blocco, "", tipologia or ""]],
+                           colWidths=[larghezza * 0.44, larghezza * 0.04, larghezza * 0.52],
+                           hAlign="LEFT")
+        affiancate.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        elementi.append(affiancate)
+
+    elementi.append(Paragraph(
+        f"Le barre confrontano ogni voce sul valore più alto della coppia. "
+        f"Palle perse e recuperi sono taggati solo per {meta.casa}. Le punizioni "
+        f"non entrano nel conteggio tiri, ma le punizioni parate contano come parata.",
+        stili["nota"],
+    ))
+    return elementi
+
+
+def _blocco_tipologia_gol(kpi, meta, stili, larghezza) -> Optional[Table]:
+    tipologia = kpi.get("tipologia_gol") or {}
+    fatti = tipologia.get("fatti", {})
+    subiti = tipologia.get("subiti", {})
+    voci = [k for k in fatti if fatti.get(k) or subiti.get(k)]
+    if not voci:
+        return None
+    righe = [[str(v).replace("_", " ").capitalize(), _fmt(fatti.get(v)), _fmt(subiti.get(v))]
+             for v in voci]
+    return _tabella(
+        ["Come nascono i gol", "Fatti", "Subiti"],
+        righe,
+        [larghezza * 0.52, larghezza * 0.24, larghezza * 0.24],
+    )
+
+
+def _pagina_andamento(df, meta, stili, larghezza) -> List:
+    elementi: List = [Paragraph("ANDAMENTO PARTITA", stili["sezione"])]
+    avversario = meta.avversario.title()
+
+    figura = _figura_andamento(df, meta.casa, avversario)
+    if figura is None:
+        elementi.append(Paragraph("Dati insufficienti per il grafico.", stili["meta"]))
+    else:
+        elementi.append(_immagine(figura, larghezza))
+        elementi.append(Paragraph(
+            "Tiri per fasce di 5 minuti di gioco effettivo: sopra la linea FMP, "
+            "sotto l'avversario. I pallini segnalano i gol.",
+            stili["nota"],
+        ))
+
+    timeline = _blocco_timeline(df, meta, larghezza)
+    if timeline is not None:
+        elementi.append(Spacer(1, 16))
+        elementi.append(KeepTogether([Paragraph("TIMELINE GOL", stili["sezione"]), timeline]))
+    return elementi
+
+
+def _blocco_timeline(df, meta, larghezza) -> Optional[Table]:
+    gol = df[mask_gol(df, "Noi") | mask_gol(df, "Loro")].copy()
+    if gol.empty:
+        return None
+
+    gol["_minuto"] = [_mmss_in_minuti(v) for v in gol["tempoEffettivo"]]
+    gol = gol.sort_values("_minuto", na_position="last")
+
+    avversario = meta.avversario.title()
+    casa_gol = 0
+    ospite_gol = 0
+    righe = []
+    for _, riga in gol.iterrows():
+        nostro = str(riga.get("squadra", "")).strip() == "Noi"
+        if nostro:
+            casa_gol += 1
+        else:
+            ospite_gol += 1
+        minuto = str(riga.get("tempoEffettivo") or "").strip()
+        marcatore = str(riga.get("chi") or "").strip().title() or "—"
+        righe.append([
+            f"{minuto}'" if minuto else "—",
+            meta.casa if nostro else avversario,
+            marcatore,
+            str(riga.get("esito") or "").strip() or "—",
+            f"{casa_gol}-{ospite_gol}",
+        ])
+
+    return _tabella(
+        ["Minuto", "Squadra", "Marcatore", "Tipo azione", "Punteggio"],
+        righe,
+        [larghezza * 0.13, larghezza * 0.20, larghezza * 0.24, larghezza * 0.28, larghezza * 0.15],
+    )
+
+
+PRECISIONE_TIRO = "__precisione__"
+
+# (etichetta colonna, chiave nelle stats individuali) nell'ordine di stampa
+COLONNE_GIOCATORE = [
+    ("Gol", "gol_fatti"),
+    ("Assist", "assist"),
+    ("Tiri", "tiri_totali"),
+    ("In porta", "tiri_in_porta_totali"),
+    ("Prec. %", PRECISIONE_TIRO),
+    ("Fuori", "tiri_fuori"),
+    ("Pali", "palo_traversa"),
+    ("Ribatt.", "tiri_ribattuti_noi"),
+    ("Perse", "palle_perse"),
+    ("Recup.", "palle_recuperate"),
+    ("Falli F", "falli_fatti"),
+    ("Falli S", "falli_subiti"),
+    ("Gialli", "ammonizioni"),
+]
+
+
+def _precisione_tiro(stats: dict) -> Optional[float]:
+    tiri = stats.get("tiri_totali", 0)
+    if not tiri:
+        return None
+    return round(stats.get("tiri_in_porta_totali", 0) / tiri * 100, 1)
+
+
+def _colonne_attive(individuali: dict):
+    """Colonne con almeno un valore, piu' l'elenco di quelle scartate.
+
+    Molti eventi del tagging 2026/27 non hanno il campo 'Chi' compilato
+    (recuperi, falli): mostrarne la colonna vorrebbe dire stampare una fila di
+    zeri. Il filtro e' dinamico, cosi' se il tagging si arricchisce le colonne
+    ricompaiono da sole.
+    """
+    def accessore(campo):
+        return lambda stats: stats.get(campo, 0)
+
+    attive, scartate = [], []
+    for etichetta, campo in COLONNE_GIOCATORE:
+        chiave_test = "tiri_totali" if campo == PRECISIONE_TIRO else campo
+        if any(stats.get(chiave_test, 0) for stats in individuali.values()):
+            if campo == PRECISIONE_TIRO:
+                attive.append((etichetta, _precisione_tiro, True))
+            else:
+                attive.append((etichetta, accessore(campo), False))
+        elif campo != PRECISIONE_TIRO:
+            scartate.append(etichetta)
+    return attive, scartate
+
+
+def _pagina_giocatori(df, meta, stili, larghezza) -> List:
+    elementi: List = [Paragraph("SCHEDA GIOCATORI", stili["sezione"])]
+
+    individuali = calcola_stats_individuali(df, by_zona=False)
+    if individuali:
+        colonne, scartate = _colonne_attive(individuali)
+
+        # Ordina per contributo offensivo, poi per volume di gioco.
+        def chiave(voce):
+            nome, stats = voce
+            return (
+                -(stats.get("gol_fatti", 0) + stats.get("assist", 0)),
+                -stats.get("tiri_totali", 0),
+                -stats.get("palle_recuperate", 0),
+                nome,
+            )
+
+        righe = [
+            [nome.title()] + [_fmt(leggi(stats), pct) for _, leggi, pct in colonne]
+            for nome, stats in sorted(individuali.items(), key=chiave)
+        ]
+
+        campi = {c for _, c in COLONNE_GIOCATORE if c != PRECISIONE_TIRO}
+        totali = {campo: sum(s.get(campo, 0) for s in individuali.values())
+                  for campo in campi}
+        righe.append(["TOTALE"] + [_fmt(leggi(totali), pct) for _, leggi, pct in colonne])
+
+        prima = larghezza * 0.16
+        resto = (larghezza - prima) / len(colonne)
+        tabella = _tabella(
+            ["Giocatore"] + [e for e, _, _ in colonne],
+            righe,
+            [prima] + [resto] * len(colonne),
+        )
+        tabella.setStyle(TableStyle([
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#e2e8f0")),
+            ("LINEABOVE", (0, -1), (-1, -1), 0.8, colors.HexColor(GRIGIO)),
+        ]))
+        elementi.append(tabella)
+
+        nota = ("Ordinamento per gol + assist. Prec. % = tiri in porta sul totale "
+                "dei tiri. Ribatt. = tiri avversari ribattuti dal giocatore.")
+        if scartate:
+            nota += (" Colonne non mostrate perché il campo Chi non è taggato su "
+                     f"questi eventi: {', '.join(scartate)}.")
+        nota += (" Senza il tagging del quartetto i gol subiti non sono più "
+                 "attribuibili ai giocatori di movimento.")
+        elementi.append(Paragraph(nota, stili["nota"]))
+    else:
+        elementi.append(Paragraph("Nessun evento individuale taggato.", stili["meta"]))
+
+    portieri = calcola_stats_portieri_individuali(df, by_zona=False)
+    if portieri:
+        righe = [[
+            nome.title(),
+            _fmt(stats.get("parate", 0)),
+            _fmt(stats.get("gol_subiti", 0)),
+            _fmt(stats.get("tiri_in_porta_subiti", 0)),
+            _fmt(stats.get("percentuale_parate", 0), percentuale=True),
+        ] for nome, stats in sorted(portieri.items())]
+        elementi.append(Spacer(1, 16))
+        elementi.append(KeepTogether([
+            Paragraph("PORTIERI", stili["sezione"]),
+            _tabella(
+                ["Portiere", "Parate", "Gol subiti", "Tiri in porta subiti", "% Parate"],
+                righe,
+                [larghezza * 0.22, larghezza * 0.14, larghezza * 0.16,
+                 larghezza * 0.28, larghezza * 0.20],
+            ),
+        ]))
+    return elementi
+
+
+# =========================================================================
+# Ingresso pubblico
+# =========================================================================
+
+def genera_report_partita(df: pd.DataFrame, meta: MetaPartita) -> bytes:
+    """Costruisce il PDF del report partita e ne restituisce i byte."""
+    df = prepara_dataframe(df)
+    kpi = calcola_kpi_executive(df)
+    if "tipologia_gol" not in kpi:
+        kpi["tipologia_gol"] = calcola_tipologia_gol(df)
+
+    buffer = BytesIO()
+    documento = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=32,
+        bottomMargin=32,
+        title=f"Report {meta.casa} vs {meta.avversario.title()}",
+        author=meta.casa,
+    )
+    stili = _stili()
+    larghezza = documento.width
+
+    elementi: List = []
+    elementi += _pagina_executive(df, meta, kpi, stili, larghezza)
+    elementi.append(PageBreak())
+    elementi += _pagina_andamento(df, meta, stili, larghezza)
+    elementi.append(PageBreak())
+    elementi += _pagina_giocatori(df, meta, stili, larghezza)
+
+    documento.build(elementi, onLaterPages=_pie_pagina, onFirstPage=_pie_pagina)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def _pie_pagina(canvas, documento) -> None:
+    """Numero di pagina in basso a destra."""
+    canvas.saveState()
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(colors.HexColor(GRIGIO))
+    canvas.drawRightString(A4[0] - 36, 20, str(canvas.getPageNumber()))
+    canvas.restoreState()

@@ -4,6 +4,8 @@ Utilities per la dashboard di panoramica stagionale
 import streamlit as st
 import pandas as pd
 
+from .utils_eventi import ESITI_IN_PORTA, _col, mask_evento, mask_gol, mask_parata, mask_tiro
+
 
 def render_panoramica_stagione(df_all, partite_ids):
     """
@@ -42,41 +44,44 @@ def render_panoramica_stagione(df_all, partite_ids):
     # Calcola metriche aggregate
     num_partite = len(partite_ids)
     
+    esito_all = _col(df_all, 'esito')
+    squadra_all = _col(df_all, 'squadra')
+
     # Gol per partita
-    gol_fatti_totali = len(df_all[(df_all['evento'] == 'Gol') & (df_all['squadra'] == 'Noi')])
-    gol_subiti_totali = len(df_all[(df_all['evento'] == 'Gol') & (df_all['squadra'] == 'Loro')])
+    gol_fatti_totali = int(mask_gol(df_all, 'Noi').sum())
+    gol_subiti_totali = int(mask_gol(df_all, 'Loro').sum())
     gol_medi_fatti = gol_fatti_totali / num_partite if num_partite > 0 else 0
     gol_medi_subiti = gol_subiti_totali / num_partite if num_partite > 0 else 0
     
-    # Tiri per partita
-    tiri_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi')])
+    # Tiri per partita (i Tiro con Esito='Assist' non sono conclusioni)
+    tiri_totali = int(mask_tiro(df_all, 'Noi').sum())
     tiri_medi = tiri_totali / num_partite if num_partite > 0 else 0
     
-    tiri_subiti_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro')])
+    tiri_subiti_totali = int(mask_tiro(df_all, 'Loro').sum())
     tiri_subiti_medi = tiri_subiti_totali / num_partite if num_partite > 0 else 0
     
-    # Palle perse/recuperate per partita
-    palle_perse_totali = len(df_all[(df_all['evento'].str.contains('Palla persa', na=False))])
-    palle_recuperate_totali = len(df_all[(df_all['evento'].str.contains('Palla recuperata', na=False))])
+    # Palle perse/recuperate per partita (taggate solo per noi)
+    palle_perse_totali = int(mask_evento(df_all, 'Palla persa').sum())
+    palle_recuperate_totali = int(mask_evento(df_all, 'Palla recuperata').sum())
     palle_perse_medie = palle_perse_totali / num_partite if num_partite > 0 else 0
     palle_recuperate_medie = palle_recuperate_totali / num_partite if num_partite > 0 else 0
     
     # Falli per partita
-    falli_fatti_totali = len(df_all[(df_all['evento'].str.contains('Fallo', na=False)) & (df_all['squadra'] == 'Noi')])
-    falli_subiti_totali = len(df_all[(df_all['evento'].str.contains('Fallo', na=False)) & (df_all['squadra'] == 'Loro')])
+    falli_fatti_totali = int((mask_evento(df_all, 'Fallo') & (squadra_all == 'Noi')).sum())
+    falli_subiti_totali = int((mask_evento(df_all, 'Fallo') & (squadra_all == 'Loro')).sum())
     falli_medi_fatti = falli_fatti_totali / num_partite if num_partite > 0 else 0
     falli_medi_subiti = falli_subiti_totali / num_partite if num_partite > 0 else 0
     
     # Percentuale tiri in porta
-    tiri_in_porta_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Noi') & df_all['esito'].isin(['Parata', 'Gol', 'Palo'])])
+    tiri_in_porta_totali = int((mask_tiro(df_all, 'Noi') & esito_all.isin(ESITI_IN_PORTA)).sum())
     perc_tiri_in_porta = (tiri_in_porta_totali / tiri_totali * 100) if tiri_totali > 0 else 0
     
     # Calcola vittorie, pareggi, sconfitte
     risultati = {'V': 0, 'P': 0, 'S': 0}
     for p_id in partite_ids:
         df_partita = df_all[df_all['partita_id'] == p_id]
-        gol_fatti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Noi')])
-        gol_subiti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Loro')])
+        gol_fatti = int(mask_gol(df_partita, 'Noi').sum())
+        gol_subiti = int(mask_gol(df_partita, 'Loro').sum())
         if gol_fatti > gol_subiti:
             risultati['V'] += 1
         elif gol_fatti < gol_subiti:
@@ -93,31 +98,9 @@ def render_panoramica_stagione(df_all, partite_ids):
     # Percentuale conversione tiri subiti in gol subiti
     perc_conversione_subiti = (gol_subiti_totali / tiri_subiti_totali * 100) if tiri_subiti_totali > 0 else 0
     
-    # Calcola vittorie, pareggi, sconfitte
-    risultati = {'V': 0, 'P': 0, 'S': 0}
-    for p_id in partite_ids:
-        df_partita = df_all[df_all['partita_id'] == p_id]
-        gol_fatti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Noi')])
-        gol_subiti = len(df_partita[(df_partita['evento'] == 'Gol') & (df_partita['squadra'] == 'Loro')])
-        if gol_fatti > gol_subiti:
-            risultati['V'] += 1
-        elif gol_fatti < gol_subiti:
-            risultati['S'] += 1
-        else:
-            risultati['P'] += 1
-    
-    # Calcola punti (3 per vittoria, 1 per pareggio)
-    punti_totali = risultati['V'] * 3 + risultati['P']
-    
-    # Percentuale conversione tiri in gol
-    perc_conversione = (gol_fatti_totali / tiri_totali * 100) if tiri_totali > 0 else 0
-    
-    # Percentuale conversione tiri subiti in gol subiti
-    perc_conversione_subiti = (gol_subiti_totali / tiri_subiti_totali * 100) if tiri_subiti_totali > 0 else 0
-    
-    # Parate del portiere
-    parate_totali = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro') & (df_all['esito'] == 'Parata')])
-    tiri_in_porta_subiti = len(df_all[(df_all['evento'].str.contains('Tiro', na=False)) & (df_all['squadra'] == 'Loro') & df_all['esito'].isin(['Parata', 'Gol', 'Palo'])])
+    # Parate del portiere (le punizioni parate contano, i tiri Assist no)
+    parate_totali = int(mask_parata(df_all, 'Noi').sum())
+    tiri_in_porta_subiti = parate_totali + gol_subiti_totali
     perc_parate = (parate_totali / tiri_in_porta_subiti * 100) if tiri_in_porta_subiti > 0 else 0
     
     # --- VISUALIZZAZIONE METRICHE (4 COLONNE COMPATTE) ---

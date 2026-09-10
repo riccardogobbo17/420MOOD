@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 # Moduli locali
-from futsal_analysis.config_supabase import get_supabase_client
+from futsal_analysis.config_supabase import get_supabase_client, TABELLA_PARTITE, TABELLA_EVENTI
 from futsal_analysis.utils_time import *
 from futsal_analysis.utils_eventi import *
 from futsal_analysis.dashboard_utils import render_panoramica_stagione
@@ -58,48 +58,19 @@ with col_logo:
 with col_title:
     st.title("🏠 FMP Dashboard")
 
-# --- SELETTORE CATEGORIA ---
 supabase = get_supabase_client()
 
-# Carica tutte le partite per ottenere le categorie disponibili
-res_all = supabase.table("partite").select("categoria").execute()
-categorie_disponibili = sorted(list(set([p.get('categoria', 'Prima Squadra') for p in res_all.data if p.get('categoria')])))
+# --- CATEGORIA E STAGIONE FISSE ---
+# Si lavora solo con la Prima Squadra e con la stagione corrente: il selettore
+# di categoria e' stato rimosso, resta la costante per filtrare le partite a DB.
+CATEGORIA = 'Prima Squadra'
+STAGIONE = '2026/27'
+categoria_scelta = CATEGORIA
 
-# Se non ci sono categorie nel DB, usa un default
-if not categorie_disponibili:
-    categorie_disponibili = ['Prima Squadra']
+st.caption(f"Prima Squadra · Stagione {STAGIONE}")
 
-# Inizializza la categoria in session_state se non esiste
-if 'categoria_selezionata' not in st.session_state:
-    st.session_state['categoria_selezionata'] = categorie_disponibili[0]
-
-# Selectbox per la categoria
-categoria_scelta = st.selectbox(
-    "📂 Seleziona Categoria",
-    categorie_disponibili,
-    index=categorie_disponibili.index(st.session_state['categoria_selezionata']) if st.session_state['categoria_selezionata'] in categorie_disponibili else 0,
-    key="categoria_selectbox"
-)
-
-# Controlla se la categoria è cambiata
-categoria_precedente = st.session_state.get('categoria_selezionata')
-if categoria_scelta != categoria_precedente:
-    # Reset della cache quando cambia categoria
-    st.cache_data.clear()
-    # Reset delle variabili di sessione che potrebbero contenere dati della categoria precedente
-    if 'partita_scelta' in st.session_state:
-        del st.session_state['partita_scelta']
-    # Aggiorna la categoria
-    st.session_state['categoria_selezionata'] = categoria_scelta
-    st.rerun()
-else:
-    # Aggiorna la categoria in session_state
-    st.session_state['categoria_selezionata'] = categoria_scelta
-
-# st.markdown(f"### Panoramica Stagione - Campionato ({categoria_scelta})")
-
-# --- Carica dati del campionato FILTRATI PER CATEGORIA ---
-res = supabase.table("partite").select("*").eq("competizione", "Campionato").eq("categoria", categoria_scelta).order("data", desc=True).execute()
+# --- Carica dati del campionato ---
+res = supabase.table(TABELLA_PARTITE).select("*").eq("competizione", "Campionato").eq("categoria", CATEGORIA).order("data", desc=True).execute()
 partite_campionato = res.data
 
 if not partite_campionato:
@@ -113,7 +84,7 @@ eventi_totali = []
 
 with st.spinner("Caricamento eventi in corso..."):
     for partita_id in partite_ids:
-        eventi_res = supabase.table("eventi").select("*").eq("partita_id", partita_id).order("posizione").execute()
+        eventi_res = supabase.table(TABELLA_EVENTI).select("*").eq("partita_id", partita_id).order("posizione").execute()
         if eventi_res.data:
             eventi_totali.extend(eventi_res.data)
 
@@ -125,7 +96,8 @@ if not eventi_totali:
 df_all = pd.DataFrame(eventi_totali)
 df_all.columns = df_all.columns.str.strip().str.lower().str.replace(" ", "_")
 df_all = df_all.copy()
-df_all['dove'] = pd.to_numeric(df_all.get('dove', None), errors='coerce').fillna(0).astype(int)
+# Colonna 'dove' (zone) non piu' usata: resta nel DB ma non viene normalizzata.
+# df_all['dove'] = pd.to_numeric(df_all.get('dove', None), errors='coerce').fillna(0).astype(int)
 df_all['Periodo'] = tag_primo_secondo_tempo(df_all)
 df_all['tempoEffettivo'] = calcola_tempo_effettivo(df_all)
 df_all['tempoReale'] = calcola_tempo_reale(df_all)
