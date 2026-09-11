@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FMP Tagger</title>
+  <link rel="stylesheet" href="tagger.css" />
+</head>
+<body>
+  <div id="app" tabindex="-1">
+    <header id="topbar">
+      <div class="brand">
+        <span class="brand-mark">FMP</span>
+        <span class="brand-name">Tagger</span>
+      </div>
+
+      <label class="field">
+        <span>Avversario</span>
+        <input id="matchName" type="text" placeholder="es. Montegrappa" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Data</span>
+        <input id="matchDate" type="date" />
+      </label>
+
+      <div class="mode-switch" role="tablist">
+        <button type="button" id="modeLive" class="active" data-mode="live">Live</button>
+        <button type="button" id="modeVideo" data-mode="video">Video</button>
+      </div>
+
+      <div class="clock-wrap" title="Tempo usato per i nuovi eventi">
+        <span class="clock-label" id="clockLabel">CRONO</span>
+        <span class="clock" id="clock">0:00:00.00</span>
+      </div>
+      <div class="score" id="score" title="Gol Noi – Gol Loro">0 – 0</div>
+      <div class="event-count" id="eventCount">0 eventi</div>
+
+      <div class="top-actions">
+        <button type="button" id="btnNew">Nuova sessione</button>
+        <button type="button" id="btnUndo" title="Ctrl+Z">Annulla</button>
+        <button type="button" id="btnImport">Importa CSV</button>
+        <button type="button" class="primary" id="btnExport">Esporta CSV</button>
+        <button type="button" id="btnSettings">Rosa / tasti</button>
+        <button type="button" id="btnHelp" title="?">?</button>
+      </div>
+    </header>
+
+    <section id="stage">
+      <div id="playerPane">
+        <div id="liveStage">
+          <div class="live-card">
+            <div class="live-kicker" id="liveStatus">PRONTO</div>
+            <div class="live-clock" id="liveClock">0:00:00.00</div>
+            <div class="live-actions">
+              <button type="button" class="primary lg" id="btnClockStart">Avvia cronometro</button>
+              <button type="button" class="lg" id="btnClockPause">Pausa</button>
+              <button type="button" class="lg danger-ghost" id="btnClockReset">Reset</button>
+            </div>
+            <p class="hint">
+              Tagga a bordo campo o dal video. Ogni tasto crea una riga con il timestamp.
+              Dopo la partita apri il video, importa il CSV e sincronizza da un evento ancora.
+            </p>
+          </div>
+        </div>
+
+        <div id="videoStage" class="hidden">
+          <div id="dropzone">
+            <p><strong>Trascina un video</strong> oppure</p>
+            <div class="drop-actions">
+              <button type="button" class="primary" id="btnPickVideo">Scegli file</button>
+              <span class="or">oppure YouTube</span>
+              <input id="ytUrl" type="text" placeholder="https://youtube.com/watch?v=..." />
+              <button type="button" id="btnLoadYt">Carica</button>
+            </div>
+          </div>
+          <div id="mediaWrap" class="hidden">
+            <video id="video" playsinline></video>
+            <div id="ytHost" class="hidden"></div>
+          </div>
+          <div id="timeline" title="Clicca un marker per andare all'evento">
+            <div id="playhead"></div>
+            <div id="markers"></div>
+          </div>
+          <div id="videoControls">
+            <button type="button" id="btnPlay" title="Spazio">Play</button>
+            <button type="button" id="btnSkipBack" title="←">−1s</button>
+            <button type="button" id="btnSkipFwd" title="→">+1s</button>
+            <button type="button" id="btnSkipBack5" title="Shift+←">−5s</button>
+            <button type="button" id="btnSkipFwd5" title="Shift+→">+5s</button>
+            <label class="rate">Velocità
+              <select id="playbackRate">
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+            <span class="vid-time" id="vidTime">0:00:00 / 0:00:00</span>
+            <button type="button" id="btnSetIn" title="Shift+I">In</button>
+            <button type="button" id="btnSetOut" title="Shift+O">Out</button>
+            <button type="button" id="btnPlayEvent" title="Invio">Play clip</button>
+            <button type="button" id="btnPlayFiltered">Play filtrati</button>
+            <button type="button" id="btnChangeVideo">Cambia video</button>
+          </div>
+        </div>
+
+        <div id="syncBar">
+          <div class="sync-block">
+            <span class="sync-title">Sincronizza sul video</span>
+            <span class="sync-meta" id="syncMeta">Seleziona un evento ancora, posiziona il video sul momento giusto, poi applica.</span>
+            <button type="button" class="primary" id="btnSyncAll">Allinea tutti</button>
+            <button type="button" id="btnSyncFrom">Da questo in poi</button>
+          </div>
+          <div class="sync-block">
+            <span class="sync-title">Correggi ritardo</span>
+            <input id="shiftSec" type="number" step="0.1" value="-1.5" />
+            <span class="unit">s</span>
+            <button type="button" id="btnShiftSel">Selezionati</button>
+            <button type="button" id="btnShiftAll">Tutti</button>
+          </div>
+        </div>
+      </div>
+
+      <aside id="panel">
+        <div class="panel-head">
+          <strong>Pannello tagging</strong>
+          <span class="muted">evento, poi keyword</span>
+        </div>
+        <div id="pendingBox" class="pending hidden"></div>
+        <div id="panelBody"></div>
+      </aside>
+    </section>
+
+    <section id="eventsPane">
+      <div id="eventsToolbar">
+        <input id="filterText" type="search" placeholder="Filtra eventi, giocatore, esito…" />
+        <select id="filterEvento">
+          <option value="">Tutti gli eventi</option>
+        </select>
+        <select id="filterSquadra">
+          <option value="">Squadra</option>
+          <option value="Noi">Noi</option>
+          <option value="Loro">Loro</option>
+          <option value="(vuota)">(vuota)</option>
+        </select>
+        <button type="button" id="btnSelectAll">Seleziona visibili</button>
+        <button type="button" id="btnDup">Duplica</button>
+        <button type="button" class="danger-ghost" id="btnDelete" title="Canc">Elimina</button>
+        <div class="spacer"></div>
+        <span class="muted" id="selInfo">Nessuna selezione</span>
+      </div>
+      <div id="inspector">
+        <label>Position <input id="insPosition" placeholder="0:00:00.00" /></label>
+        <label>Duration <input id="insDuration" placeholder="0:00:05.00" /></label>
+        <label>Evento <input id="insEvento" /></label>
+        <label>Squadra <input id="insSquadra" /></label>
+        <label>Chi <input id="insChi" /></label>
+        <label>Esito <input id="insEsito" /></label>
+        <label>Portiere <input id="insPortiere" /></label>
+        <label>Dove <input id="insDove" /></label>
+        <label>Lato <input id="insLato" /></label>
+      </div>
+      <div id="tableWrap">
+        <table id="eventsTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th>#</th>
+              <th>Position</th>
+              <th>Dur</th>
+              <th>Evento</th>
+              <th>Squadra</th>
+              <th>Chi</th>
+              <th>Esito</th>
+              <th>Portiere</th>
+              <th>Dove</th>
+              <th>Lato</th>
+            </tr>
+          </thead>
+          <tbody id="eventsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="helpOverlay" class="overlay hidden">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>Come si tagga</h2>
+        <button type="button" id="btnCloseHelp">Chiudi</button>
+      </div>
+      <div class="help-grid">
+        <div>
+          <h3>Flusso</h3>
+          <ol>
+            <li>Live: avvia il cronometro e premi i tasti evento mentre guardi.</li>
+            <li>Video: carica il file (o YouTube) e tagga sul current time.</li>
+            <li>Dopo ogni evento usa il pannello per Squadra / Chi / Esito.</li>
+            <li>Importa il CSV su un altro video e sincronizza da un evento ancora.</li>
+            <li>Correggi i timestamp (ritardo di tagging) con lo shift in secondi.</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Tasti sempre attivi</h3>
+          <ul class="kbd-list" id="helpShortcuts"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="overlay hidden">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>Rosa, tasti, ritardo</h2>
+        <button type="button" id="btnCloseSettings">Chiudi</button>
+      </div>
+      <div class="settings-grid">
+        <label class="stack">Giocatori (uno per riga)
+          <textarea id="cfgPlayers" rows="12"></textarea>
+        </label>
+        <label class="stack">Portieri (uno per riga)
+          <textarea id="cfgKeepers" rows="6"></textarea>
+        </label>
+        <div class="stack nums">
+          <label>Durata default (s) <input id="cfgDuration" type="number" step="0.5" min="0" /></label>
+          <label>Ritardo tagging (s) <input id="cfgDelay" type="number" step="0.1" />
+            <small>Si sottrae al timestamp quando crei l'evento (es. 1.5 se premi sempre in ritardo).</small>
+          </label>
+          <label>Preroll clip (s) <input id="cfgPreroll" type="number" step="0.5" min="0" /></label>
+          <label>Portiere sticky
+            <select id="cfgStickyKeeper"></select>
+          </label>
+        </div>
+      </div>
+      <h3>Shortcut eventi</h3>
+      <div id="shortcutList" class="shortcut-list"></div>
+      <div class="sheet-foot">
+        <button type="button" id="btnResetShortcuts">Ripristina tasti default</button>
+        <button type="button" class="primary" id="btnSaveSettings">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <input id="fileCsv" type="file" accept=".csv,text/csv" hidden />
+  <input id="fileVideo" type="file" accept="video/*" hidden />
+
+  <script src="tagger.js"></script>
+</body>
+</html>
