@@ -25,6 +25,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
@@ -108,13 +109,13 @@ def _assicura_font() -> None:
     _FONT_OK = True  # fallback Helvetica gia' impostato
 
 
-# Torta tipologie: solo sfumature di fucsia (niente nero/grigio sulle fette).
+# Torta tipologie: rosa/fucsia ben contrastati (leggibili anche in legenda).
 COLORI_TIPOLOGIA = {
-    "Costruzione": "#8f3a62",
-    "Transizione": "#c45b8c",
-    "Palla inattiva": "#d478a8",
-    "Errore": "#e0a0c0",
-    "non_taggato": "#efc8dc",
+    "Costruzione": "#5a1838",
+    "Transizione": "#c2185b",
+    "Palla inattiva": "#f48fb1",
+    "Errore": "#880e4f",
+    "non_taggato": "#fce4ec",
 }
 
 
@@ -194,7 +195,7 @@ VOCI_CONFRONTO = [
     ("Tiri totali", "tiri", False),
     ("Tiri in porta", "tiri_in_porta", False),
     ("Efficacia tiro", "efficacia_tiro_pct", True),
-    ("Conversione", "conversione_pct", True),
+    ("Conv. Tiri", "conversione_pct", True),
     ("Parate", "parate", False),
     ("% Parate", "perc_parate", True),
     ("Angoli", "angoli", False),
@@ -220,18 +221,17 @@ def _kpi_per_barre(kpi: dict) -> dict:
     return {"Noi": noi, "Loro": loro, "tipologia_gol": kpi.get("tipologia_gol")}
 
 
-# Banda centrale riservata alle etichette e lunghezza massima delle barre,
-# in unita' dell'asse x.
-CORSIA_ETICHETTE = 0.34
-LUNGHEZZA_BARRA = 1.0
+# Larghezza della pista delle barre (unita' asse x) e colonna etichette.
+LARGHEZZA_PISTA = 1.0
+LARGHEZZA_ETICHETTA = 0.28
+PISTA_CHIARA = "#dedede"  # fondo grigio chiaro sotto i valori
 
 
 def _figura_confronto(kpi: dict, casa: str, ospite: str) -> plt.Figure:
-    """Barre divergenti Noi (sinistra) vs Loro (destra), una riga per KPI.
+    """Pista piena in grigio chiaro; sopra, fucsia/grigio fino al valore.
 
-    Ogni riga e' normalizzata sul valore piu' alto della coppia, cosi' la barra
-    piena indica sempre chi comanda quella voce. Le etichette stanno in una
-    corsia centrale, i valori alle estremita' delle barre.
+    Conte: normalizzate sul max della coppia. Percentuali: ogni lato usa la
+    propria scala 0-100% (pista piena = 100%).
     """
     noi, loro = kpi.get("Noi", {}), kpi.get("Loro", {})
     voci = [
@@ -240,44 +240,68 @@ def _figura_confronto(kpi: dict, casa: str, ospite: str) -> plt.Figure:
         if noi.get(chiave) is not None or loro.get(chiave) is not None
     ]
 
-    altezza = max(2.4, 0.38 * len(voci) + 0.8)
-    fig, ax = plt.subplots(figsize=(7.4, altezza))
+    meta_barra = 0.42
+    altezza = max(2.4, 0.36 * len(voci) + 0.75)
+    fig, ax = plt.subplots(figsize=(7.0, altezza))
+    meta = LARGHEZZA_PISTA / 2
+    label_x = -meta - 0.04
 
     for y, (etichetta, v_noi, v_loro, pct) in enumerate(voci):
         a = float(v_noi or 0)
         b = float(v_loro or 0)
-        scala = max(a, b) or 1.0
-        len_noi = a / scala * LUNGHEZZA_BARRA
-        len_loro = b / scala * LUNGHEZZA_BARRA
+        if pct:
+            len_noi = min(max(a, 0.0), 100.0) / 100.0 * meta
+            len_loro = min(max(b, 0.0), 100.0) / 100.0 * meta
+        else:
+            scala = max(a, b, 1.0)
+            len_noi = (a / scala) * meta
+            len_loro = (b / scala) * meta
 
-        ax.barh(y, -len_noi, left=-CORSIA_ETICHETTE, height=0.5, color=BLU, zorder=3)
-        ax.barh(y, len_loro, left=CORSIA_ETICHETTE, height=0.5, color=GRIGIO, zorder=3)
+        ax.barh(y, -meta, left=0, height=meta_barra, color=PISTA_CHIARA,
+                edgecolor="none", zorder=2)
+        ax.barh(y, meta, left=0, height=meta_barra, color=PISTA_CHIARA,
+                edgecolor="none", zorder=2)
+        if len_noi > 0:
+            ax.barh(y, -len_noi, left=0, height=meta_barra, color=BLU,
+                    edgecolor="none", zorder=3)
+        if len_loro > 0:
+            ax.barh(y, len_loro, left=0, height=meta_barra, color=GRIGIO,
+                    edgecolor="none", zorder=3)
 
-        ax.text(-CORSIA_ETICHETTE - len_noi - 0.03, y, _fmt(v_noi, pct),
-                ha="right", va="center", fontsize=8.5, fontweight="bold",
-                color=BLU_SCURO, zorder=4)
-        ax.text(CORSIA_ETICHETTE + len_loro + 0.03, y, _fmt(v_loro, pct),
-                ha="left", va="center", fontsize=8.5, fontweight="bold",
-                color=GRIGIO_SCURO, zorder=4)
-        ax.text(0, y, etichetta, ha="center", va="center", fontsize=7.5,
-                color=GRIGIO_SCURO, zorder=4)
+        ax.text(-meta + 0.03, y, _fmt(v_noi, pct),
+                ha="left", va="center", fontsize=7.5, fontweight="bold",
+                color=BLU_SCURO, zorder=5)
+        ax.text(meta - 0.03, y, _fmt(v_loro, pct),
+                ha="right", va="center", fontsize=7.5, fontweight="bold",
+                color=GRIGIO_SCURO, zorder=5)
+        ax.text(label_x, y, etichetta, ha="right", va="center",
+                fontsize=7.2, color=GRIGIO_SCURO, zorder=4)
 
-    margine = CORSIA_ETICHETTE + LUNGHEZZA_BARRA + 0.24
-    ax.set_xlim(-margine, margine)
-    ax.set_ylim(len(voci) - 0.4, -1.1)
+    ax.axvline(0, color="#d4d4d4", linewidth=0.8, zorder=4)
+    ax.set_xlim(label_x - LARGHEZZA_ETICHETTA, meta + 0.06)
+    ax.set_ylim(len(voci) - 0.4, -1.05)
     ax.set_yticks([])
     ax.set_xticks([])
     for lato in ("top", "right", "bottom", "left"):
         ax.spines[lato].set_visible(False)
 
-    intestazione = CORSIA_ETICHETTE + LUNGHEZZA_BARRA / 2
-    ax.text(-intestazione, -0.95, casa.upper(), ha="center", va="center",
-            fontsize=10, fontweight="bold", color=BLU)
-    ax.text(intestazione, -0.95, ospite.upper(), ha="center", va="center",
-            fontsize=10, fontweight="bold", color=GRIGIO_SCURO)
+    ax.text(-meta / 2, -0.88, casa.upper(), ha="center", va="center",
+            fontsize=9.5, fontweight="bold", color=BLU)
+    ax.text(meta / 2, -0.88, ospite.upper(), ha="center", va="center",
+            fontsize=9.5, fontweight="bold", color=GRIGIO_SCURO)
 
-    fig.tight_layout(pad=0.4)
+    fig.tight_layout(pad=0.25)
     return fig
+
+
+def _densita_gaussiana(minuti: Sequence[float], x: np.ndarray, sigma: float = 2.0) -> np.ndarray:
+    """Somma di gaussiane centrate su ogni evento → curva tipo violino."""
+    if not minuti:
+        return np.zeros_like(x, dtype=float)
+    y = np.zeros_like(x, dtype=float)
+    for m in minuti:
+        y += np.exp(-0.5 * ((x - m) / sigma) ** 2)
+    return y
 
 
 def _gol_con_marcatori(df: pd.DataFrame, squadra: str) -> List[tuple]:
@@ -304,7 +328,7 @@ def _gol_con_marcatori(df: pd.DataFrame, squadra: str) -> List[tuple]:
 
 
 def _figura_andamento(df: pd.DataFrame, casa: str, ospite: str) -> Optional[plt.Figure]:
-    """Tiri per fasce di 5 minuti (noi sopra, loro sotto) con gol + marcatore."""
+    """Tiri per fasce di 5' (barre, noi sopra / loro sotto) con gol + marcatore."""
     tiri_noi = _minuti_evento(df, mask_tiro(df, "Noi"))
     tiri_loro = _minuti_evento(df, mask_tiro(df, "Loro"))
     gol_noi = _gol_con_marcatori(df, "Noi")
@@ -327,54 +351,53 @@ def _figura_andamento(df: pd.DataFrame, casa: str, ospite: str) -> Optional[plt.
     conteggi_noi = per_fascia(tiri_noi)
     conteggi_loro = per_fascia(tiri_loro)
 
-    fig, ax = plt.subplots(figsize=(7.4, 2.85))
-    ax.bar(centri, conteggi_noi, width=AMPIEZZA_FASCIA_MIN * 0.82,
-           color=BLU, label=f"Tiri {casa}", zorder=3)
-    ax.bar(centri, [-c for c in conteggi_loro], width=AMPIEZZA_FASCIA_MIN * 0.82,
-           color=GRIGIO, label=f"Tiri {ospite}", zorder=3)
+    fig, ax = plt.subplots(figsize=(6.6, 2.35))
+    larghezza_barra = AMPIEZZA_FASCIA_MIN * 0.78
+    ax.bar(centri, conteggi_noi, width=larghezza_barra,
+           color=BLU, edgecolor="white", linewidth=0.6, zorder=3,
+           label=f"Tiri {casa}")
+    ax.bar(centri, [-c for c in conteggi_loro], width=larghezza_barra,
+           color=GRIGIO, edgecolor="white", linewidth=0.6, zorder=3,
+           label=f"Tiri {ospite}")
 
     limite = max([1] + conteggi_noi + conteggi_loro)
-    # I gol vanno su due corsie dedicate, appena oltre la barra piu' alta.
-    # Il nome sta SOTTO al pallino (i nostri gol sono solo sopra lo zero).
-    corsia = limite + 1.35
+    corsia = limite + 1.25
     for m, nome in gol_noi:
-        ax.plot([m], [corsia], marker="o", markersize=6.5, color=BLU_SCURO, zorder=5)
+        ax.plot([m], [corsia], marker="o", markersize=5.5, color=BLU_SCURO, zorder=5)
         if nome:
             ax.annotate(
-                nome, (m, corsia), textcoords="offset points", xytext=(0, -8),
-                ha="center", va="top", fontsize=6.2, color=BLU_SCURO,
+                nome, (m, corsia), textcoords="offset points", xytext=(0, -7),
+                ha="center", va="top", fontsize=5.8, color=BLU_SCURO,
                 fontweight="bold", zorder=6,
             )
     for m, nome in gol_loro:
-        ax.plot([m], [-corsia], marker="o", markersize=6.5, color=ROSSO, zorder=5)
+        ax.plot([m], [-corsia], marker="o", markersize=5.5, color=ROSSO, zorder=5)
         if nome:
             ax.annotate(
-                nome, (m, -corsia), textcoords="offset points", xytext=(0, 8),
-                ha="center", va="bottom", fontsize=6.2, color=ROSSO,
+                nome, (m, -corsia), textcoords="offset points", xytext=(0, 7),
+                ha="center", va="bottom", fontsize=5.8, color=ROSSO,
                 fontweight="bold", zorder=6,
             )
 
-    # Separatore fra primo e secondo tempo
     ax.axvline(DURATA_TEMPO_MIN, color=BORDO, linewidth=1.0, linestyle="--", zorder=2)
-    ax.text(DURATA_TEMPO_MIN, corsia + 0.55, "intervallo", ha="center", va="bottom",
-            fontsize=7, color=TENUE)
+    ax.text(DURATA_TEMPO_MIN, corsia + 0.45, "intervallo", ha="center", va="bottom",
+            fontsize=6.5, color=TENUE)
 
     ax.axhline(0, color=BORDO, linewidth=0.8, zorder=2)
     ax.set_xlim(0, durata)
-    ax.set_ylim(-corsia - 1.2, corsia + 1.0)
+    ax.set_ylim(-corsia - 1.1, corsia + 0.9)
     ax.set_xticks(bordi)
-    ax.set_xticklabels([f"{b}'" for b in bordi], fontsize=7.5, color=TENUE)
+    ax.set_xticklabels([f"{b}'" for b in bordi], fontsize=7, color=TENUE)
     passi = range(-limite, limite + 1, max(1, limite // 3))
     ax.set_yticks(list(passi))
-    ax.set_yticklabels([str(abs(v)) for v in passi], fontsize=7.5, color=TENUE)
-    ax.set_ylabel("tiri", fontsize=7.5, color=TENUE)
-    ax.grid(axis="y", color="#f0f0f0", linewidth=0.7, zorder=1)
+    ax.set_yticklabels([str(abs(v)) for v in passi], fontsize=7, color=TENUE)
+    ax.set_ylabel("tiri", fontsize=7, color=TENUE)
+    ax.grid(axis="y", color="#f0f0f0", linewidth=0.6, zorder=1)
     ax.set_axisbelow(True)
     for lato in ("top", "right", "left"):
         ax.spines[lato].set_visible(False)
     ax.spines["bottom"].set_color(BORDO)
 
-    # Legenda sotto l'asse: sopra le barre coprirebbe i pallini dei gol.
     ax.legend(
         handles=[
             Patch(facecolor=BLU, label=f"Tiri {casa}"),
@@ -385,23 +408,23 @@ def _figura_andamento(df: pd.DataFrame, casa: str, ospite: str) -> Optional[plt.
                    label=f"Gol {ospite}"),
         ],
         loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=4,
-        fontsize=7, frameon=False, handlelength=1.2, columnspacing=1.6,
+        fontsize=6.5, frameon=False, handlelength=1.1, columnspacing=1.3,
     )
 
-    fig.tight_layout(pad=0.35)
+    fig.tight_layout(pad=0.25)
     return fig
 
 
 def _colori_fette(etichette: Sequence[str]) -> List[str]:
-    """Assegna sfumature di fucsia alle fette (mai nero/grigio)."""
+    """Rosa/fucsia a contrasto marcato fra una fetta e l'altra."""
     scala = [
-        "#7a3355",
-        "#8f3a62",
-        "#a84874",
-        "#c45b8c",
-        "#d478a8",
-        "#e0a0c0",
-        "#efc8dc",
+        "#5a1838",  # bordeaux
+        "#c2185b",  # fucsia vivo
+        "#f48fb1",  # rosa chiaro
+        "#880e4f",  # magenta scuro
+        "#ec407a",  # rosa medio
+        "#f8bbd0",  # rosa pastel
+        "#ad1457",
     ]
     out = []
     for i, e in enumerate(etichette):
@@ -410,49 +433,50 @@ def _colori_fette(etichette: Sequence[str]) -> List[str]:
 
 
 def _figura_tipologie_gol(kpi: dict) -> Optional[plt.Figure]:
-    """Due torte affiancate: come nascono i gol fatti e quelli subiti."""
+    """Due torte affiancate; % in bianco, senza legenda sotto."""
     tipologia = kpi.get("tipologia_gol") or {}
     fatti = {k: v for k, v in (tipologia.get("fatti") or {}).items() if v}
     subiti = {k: v for k, v in (tipologia.get("subiti") or {}).items() if v}
     if not fatti and not subiti:
         return None
 
-    fig, assi = plt.subplots(1, 2, figsize=(7.4, 2.55))
+    fig, assi = plt.subplots(1, 2, figsize=(5.8, 2.05))
     for ax, dati, titolo in (
         (assi[0], fatti, "Gol fatti"),
         (assi[1], subiti, "Gol subiti"),
     ):
         if not dati:
             ax.text(0.5, 0.5, "nessun gol", ha="center", va="center",
-                    fontsize=9, color=TENUE)
+                    fontsize=8, color=TENUE)
             ax.set_axis_off()
-            ax.set_title(titolo, fontsize=9, color=GRIGIO_SCURO, pad=6)
+            ax.set_title(titolo, fontsize=8.5, color=GRIGIO_SCURO, pad=3)
             continue
 
         etichette = list(dati.keys())
         valori = list(dati.values())
         colori = _colori_fette(etichette)
-        cunei, _, autotexts = ax.pie(
+        labels = [f"{e.replace('_', ' ').capitalize()} ({v})" for e, v in zip(etichette, valori)]
+        cunei, testi, autotexts = ax.pie(
             valori,
             colors=colori,
+            labels=labels,
             startangle=90,
-            wedgeprops={"width": 0.55, "edgecolor": "white", "linewidth": 1.2},
+            wedgeprops={"width": 0.55, "edgecolor": "white", "linewidth": 1.1},
             autopct=lambda p: f"{p:.0f}%" if p >= 8 else "",
-            pctdistance=0.72,
-            textprops={"fontsize": 7, "color": INCHIOSTRO},
+            pctdistance=0.70,
+            labeldistance=1.12,
+            textprops={"fontsize": 6.2, "color": GRIGIO_SCURO},
         )
         for t in autotexts:
-            t.set_fontsize(7)
-            t.set_color(INCHIOSTRO)
-        ax.set_title(titolo, fontsize=9, color=GRIGIO_SCURO, pad=6)
-        ax.legend(
-            cunei,
-            [f"{e.replace('_', ' ').capitalize()} ({v})" for e, v in zip(etichette, valori)],
-            loc="upper center", bbox_to_anchor=(0.5, -0.02),
-            fontsize=6.5, frameon=False, ncol=2, handlelength=1.0,
-        )
+            t.set_fontsize(7.5)
+            t.set_color("white")
+            t.set_fontweight("bold")
+        for t in testi:
+            t.set_fontsize(6.0)
+            t.set_color(GRIGIO_SCURO)
+        ax.set_title(titolo, fontsize=8.5, color=GRIGIO_SCURO, pad=3)
 
-    fig.tight_layout(pad=0.35)
+    fig.tight_layout(pad=0.25)
     return fig
 
 
@@ -567,46 +591,39 @@ def _pagina_executive(df, meta, kpi, stili, larghezza) -> List:
         f'&nbsp;&nbsp;{avversario}',
         stili["punteggio"],
     ))
-    elementi.append(Spacer(1, 10))
+    elementi.append(Spacer(1, 4))
 
-    # 1) Andamento prima delle barre
+    # 1) Andamento (grandezza precedente)
     elementi.append(Paragraph("ANDAMENTO PARTITA", stili["sezione"]))
     figura_and = _figura_andamento(df, meta.casa, avversario)
     if figura_and is None:
         elementi.append(Paragraph("Dati insufficienti per il grafico.", stili["meta"]))
     else:
-        elementi.append(_immagine(figura_and, larghezza))
-        elementi.append(Paragraph(
-            "Tiri per fasce di 5' di gioco effettivo (sopra FMP, sotto avversario). "
-            "I pallini sono i gol, con il marcatore accanto.",
-            stili["nota"],
-        ))
-    elementi.append(Spacer(1, 8))
+        img_and = _immagine(figura_and, larghezza * 0.90)
+        img_and.hAlign = "CENTER"
+        elementi.append(img_and)
+    elementi.append(Spacer(1, 3))
 
-    # 2) Barre KPI
+    # 2) Barre KPI (spessore ripristinato + sfondo pista)
     elementi.append(Paragraph("CONFRONTO", stili["sezione"]))
     kpi_barre = _kpi_per_barre(kpi)
     elementi.append(_immagine(
-        _figura_confronto(kpi_barre, meta.casa, avversario), larghezza,
+        _figura_confronto(kpi_barre, meta.casa, avversario), larghezza * 0.96,
     ))
-
-    # 3) Tipologie gol a torta (tenute insieme alla nota, cosi' non restano
-    #    titoli orfani in fondo alla pagina precedente).
-    coda: List = []
-    figura_tipo = _figura_tipologie_gol(kpi)
-    if figura_tipo is not None:
-        coda.append(Paragraph("COME NASCONO I GOL", stili["sezione"]))
-        coda.append(_immagine(figura_tipo, larghezza))
-    coda.append(Paragraph(
-        "Le barre confrontano ogni voce sul valore più alto della coppia. "
+    elementi.append(Paragraph(
         "Efficacia tiro = tiri in porta / tiri totali. "
-        "Conversione = gol / tiri in porta. "
-        f"Palle recuperate/perse: taggate solo per {meta.casa}; "
-        "le recuperate avversarie coincidono con le nostre perse (e viceversa). "
-        "Le punizioni non entrano nei tiri, ma una punizione parata conta come parata.",
+        "Conv. Tiri = gol / tiri in porta.",
         stili["nota"],
     ))
-    elementi.append(KeepTogether(coda))
+    elementi.append(Spacer(1, 2))
+
+    # 3) Tipologie (senza titolo sezione, per risparmiare spazio in pagina 1)
+    figura_tipo = _figura_tipologie_gol(kpi)
+    if figura_tipo is not None:
+        img_tipo = _immagine(figura_tipo, larghezza * 0.68)
+        img_tipo.hAlign = "CENTER"
+        elementi.append(img_tipo)
+
     return elementi
 
 
