@@ -8,11 +8,9 @@ import matplotlib.pyplot as plt
 from futsal_analysis.config_supabase import get_supabase_client, TABELLA_PARTITE, TABELLA_EVENTI
 from futsal_analysis.utils_time import *
 from futsal_analysis.utils_eventi import *
-from futsal_analysis.utils_pdf import (
-    PdfMatchMeta,
-    PdfTableSection,
-    generate_pdf_report,
-)
+from futsal_analysis.report_partita import MetaPartita, genera_report_partita
+# LEGACY: sezioni ancora accumulate sotto per un eventuale ritorno a utils_pdf.
+from futsal_analysis.utils_pdf import PdfTableSection
 
 # --- MODULI DISATTIVATI (formato tagging 2026/27) ---
 # Minutaggi, zone e quartetti non sono piu' calcolabili: il CSV non contiene
@@ -21,7 +19,13 @@ from futsal_analysis.utils_pdf import (
 # from futsal_analysis.utils_minutaggi import *
 # from futsal_analysis.pitch_drawer import FutsalPitch
 # from futsal_analysis.zone_analysis import *
-# from futsal_analysis.utils_pdf import PdfImageSection, figure_to_png_bytes
+# PDF legacy (tabelle + mappe zona). Il download usa report_partita.
+# from futsal_analysis.utils_pdf import (
+#     PdfMatchMeta,
+#     PdfImageSection,
+#     figure_to_png_bytes,
+#     generate_pdf_report,
+# )
 
 st.set_page_config(page_title="Analisi Partite", layout="wide", page_icon="⚽")
 
@@ -75,6 +79,12 @@ if "partita_scelta" not in st.session_state:
 partita_id = st.session_state["partita_scelta"]
 partita_info = next((p for p in partite if p["id"] == partita_id), None)
 
+# Se cambia partita, invalidiamo il PDF generato in precedenza.
+if st.session_state.get("match_pdf_partita_id") != partita_id:
+    st.session_state.pop("match_pdf_bytes", None)
+    st.session_state.pop("match_pdf_name", None)
+    st.session_state["match_pdf_partita_id"] = partita_id
+
 if partita_info is None:
     st.error("⚠️ La partita selezionata non è più disponibile.")
     if 'partita_scelta' in st.session_state:
@@ -111,6 +121,7 @@ score_pdf_table = pd.DataFrame({
     partita_info['avversario'].title(): [gol_subiti],
 }, index=["Gol"])
 
+# Accumulo LEGACY per utils_pdf (non usato dal download attuale).
 pdf_table_sections = []
 if not score_pdf_table.empty:
     pdf_table_sections.append(PdfTableSection("Risultato", score_pdf_table.copy()))
@@ -852,136 +863,40 @@ st.subheader("Esporta report partita")
 
 if st.button("📄 Genera PDF", key="generate_match_pdf"):
     with st.spinner("Generazione report PDF in corso..."):
-        image_sections = []
-
-        def metric_label(name: str) -> str:
-            return name.replace('_', ' ').title()
-
-        # Con ABILITA_ZONE=False `zone_pdf_context` resta vuoto e i cicli qui
-        # sotto non producono nessuna mappa: il PDF esce senza immagini.
-        zona_report = zone_pdf_context.get("report_zona", {})
-
-        # Sezioni squadra - attacco
-        for metric in zone_pdf_context.get("team_att_metrics", []):
-            try:
-                fig, _ = draw_team_metric_per_zone(
-                    zona_report,
-                    FutsalPitch(),
-                    [metric],
-                    team_key="attacco",
-                    title=f"Attacco - {metric_label(metric)}",
-                    cmap=cm.Reds,
-                    per_side=True,
-                )
-                fig.set_size_inches(4.0, 3.0)
-                image_sections.append(
-                    PdfImageSection(
-                        f"Zone Squadra Attacco - {metric_label(metric)}",
-                        figure_to_png_bytes(fig),
-                        max_width=320,
-                    )
-                )
-                plt.close(fig)
-            except Exception:
-                continue
-
-        # Sezioni squadra - difesa
-        for metric in zone_pdf_context.get("team_dif_metrics", []):
-            try:
-                fig, _ = draw_team_metric_per_zone(
-                    zona_report,
-                    FutsalPitch(),
-                    [metric],
-                    team_key="difesa",
-                    title=f"Difesa - {metric_label(metric)}",
-                    cmap=cm.Blues,
-                    per_side=True,
-                )
-                fig.set_size_inches(4.0, 3.0)
-                image_sections.append(
-                    PdfImageSection(
-                        f"Zone Squadra Difesa - {metric_label(metric)}",
-                        figure_to_png_bytes(fig),
-                        max_width=320,
-                    )
-                )
-                plt.close(fig)
-            except Exception:
-                continue
-
-        # Sezioni individuali
-        zona_individuali = zona_report.get('individuali', {})
-        for giocatore, metriche in zone_pdf_context.get("player_metrics", {}).items():
-            for metric in metriche.get("attacco", []):
-                try:
-                    fig, _ = draw_player_metric_per_zone(
-                        zona_individuali,
-                        FutsalPitch(),
-                        [metric],
-                        chi=giocatore,
-                        title=f"{giocatore} - Attacco {metric_label(metric)}",
-                        cmap=cm.OrRd,
-                        per_side=True,
-                    )
-                    fig.set_size_inches(4.0, 3.0)
-                    image_sections.append(
-                        PdfImageSection(
-                            f"Zone {giocatore} Attacco - {metric_label(metric)}",
-                            figure_to_png_bytes(fig),
-                            max_width=320,
-                        )
-                    )
-                    plt.close(fig)
-                except Exception:
-                    continue
-
-            for metric in metriche.get("difesa", []):
-                try:
-                    fig, _ = draw_player_metric_per_zone(
-                        zona_individuali,
-                        FutsalPitch(),
-                        [metric],
-                        chi=giocatore,
-                        title=f"{giocatore} - Difesa {metric_label(metric)}",
-                        cmap=cm.BuPu,
-                        per_side=True,
-                    )
-                    fig.set_size_inches(4.0, 3.0)
-                    image_sections.append(
-                        PdfImageSection(
-                            f"Zone {giocatore} Difesa - {metric_label(metric)}",
-                            figure_to_png_bytes(fig),
-                            max_width=320,
-                        )
-                    )
-                    plt.close(fig)
-                except Exception:
-                    continue
-
-        export_title = f"Report Partita - {partita_info['competizione'].title()} vs {partita_info['avversario'].title()} ({partita_info['data']})"
+        # Unico layout PDF: stesso di
+        #   .venv/bin/python app/scripts/genera_report.py <csv> <avversario>
+        # Il percorso legacy (utils_pdf + mappe zona) resta commentato sotto.
         file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        match_meta = PdfMatchMeta(
-            home_name="FMP",
-            away_name=str(partita_info.get("avversario", "Avversario")).title(),
-            home_goals=int(gol_fatti),
-            away_goals=int(gol_subiti),
-            competition=str(partita_info.get("competizione", "")).title(),
-            match_date=str(partita_info.get("data", "")),
-            category=str(categoria_attiva),
+        pdf_bytes = genera_report_partita(
+            df,
+            MetaPartita(
+                avversario=str(partita_info.get("avversario", "Avversario")),
+                competizione=str(partita_info.get("competizione", "")),
+                data=str(partita_info.get("data", "")),
+                categoria=str(categoria_attiva),
+            ),
         )
-        kpi_exec = report_eventi.get("kpi_executive") or calcola_kpi_executive(df)
-        pdf_bytes = generate_pdf_report(
-            export_title,
-            table_sections=pdf_table_sections,
-            image_sections=image_sections,
-            match_meta=match_meta,
-            kpi_executive=kpi_exec,
-        )
+        st.session_state["match_pdf_bytes"] = pdf_bytes
+        st.session_state["match_pdf_name"] = f"report_partita_{file_timestamp}.pdf"
 
+        # --- LEGACY generate_pdf_report (utils_pdf) ---
+        # image_sections = []
+        # ... mappe zona da zone_pdf_context ...
+        # match_meta = PdfMatchMeta(...)
+        # kpi_exec = report_eventi.get("kpi_executive") or calcola_kpi_executive(df)
+        # pdf_bytes = generate_pdf_report(
+        #     export_title,
+        #     table_sections=pdf_table_sections,
+        #     image_sections=image_sections,
+        #     match_meta=match_meta,
+        #     kpi_executive=kpi_exec,
+        # )
+
+if st.session_state.get("match_pdf_bytes"):
     st.download_button(
         "⬇️ Scarica PDF",
-        data=pdf_bytes,
-        file_name=f"report_partita_{file_timestamp}.pdf",
+        data=st.session_state["match_pdf_bytes"],
+        file_name=st.session_state.get("match_pdf_name", "report_partita.pdf"),
         mime="application/pdf",
         key="download_match_pdf",
     )
