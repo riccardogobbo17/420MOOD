@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store" />
   <title>FMP Tagger</title>
   <link rel="stylesheet" href="tagger.css" />
 </head>
@@ -40,6 +41,7 @@
         <button type="button" id="btnUndo" title="Ctrl+Z">Annulla</button>
         <button type="button" id="btnImport">Importa CSV</button>
         <button type="button" class="primary" id="btnExport">Esporta CSV</button>
+        <button type="button" id="btnPdf" title="Richiede python app/tagger/serve.py">Genera PDF</button>
         <button type="button" id="btnSettings">Rosa / tasti</button>
         <button type="button" id="btnHelp" title="?">?</button>
       </div>
@@ -52,14 +54,10 @@
             <div class="live-kicker" id="liveStatus">PRONTO</div>
             <div class="live-clock" id="liveClock">0:00:00.00</div>
             <div class="live-actions">
-              <button type="button" class="primary lg" id="btnClockStart">Avvia cronometro</button>
-              <button type="button" class="lg" id="btnClockPause">Pausa</button>
-              <button type="button" class="lg danger-ghost" id="btnClockReset">Reset</button>
+              <button type="button" class="primary" id="btnClockStart">Avvia</button>
+              <button type="button" id="btnClockPause">Pausa</button>
+              <button type="button" class="danger-ghost" id="btnClockReset">Reset</button>
             </div>
-            <p class="hint">
-              Tagga a bordo campo o dal video. Ogni tasto crea una riga con il timestamp.
-              Dopo la partita apri il video, importa il CSV e sincronizza da un evento ancora.
-            </p>
           </div>
         </div>
 
@@ -108,18 +106,24 @@
         </div>
 
         <div id="syncBar">
-          <div class="sync-block">
-            <span class="sync-title">Sincronizza sul video</span>
-            <span class="sync-meta" id="syncMeta">Seleziona un evento ancora, posiziona il video sul momento giusto, poi applica.</span>
-            <button type="button" class="primary" id="btnSyncAll">Allinea tutti</button>
-            <button type="button" id="btnSyncFrom">Da questo in poi</button>
-          </div>
-          <div class="sync-block">
-            <span class="sync-title">Correggi ritardo</span>
-            <input id="shiftSec" type="number" step="0.1" value="-1.5" />
-            <span class="unit">s</span>
-            <button type="button" id="btnShiftSel">Selezionati</button>
-            <button type="button" id="btnShiftAll">Tutti</button>
+          <button type="button" id="btnToggleSync" class="sync-toggle" aria-expanded="false">
+            <span>Sincronizzazione</span>
+            <span class="sync-toggle-hint" id="syncToggleHint">mostra</span>
+          </button>
+          <div id="syncBody" class="hidden">
+            <div class="sync-block">
+              <span class="sync-title">Sincronizza sul video</span>
+              <span class="sync-meta" id="syncMeta">Seleziona un evento ancora, posiziona il video sul momento giusto, poi applica.</span>
+              <button type="button" class="primary" id="btnSyncAll">Allinea tutti</button>
+              <button type="button" id="btnSyncFrom">Da questo in poi</button>
+            </div>
+            <div class="sync-block">
+              <span class="sync-title">Correggi ritardo</span>
+              <input id="shiftSec" type="number" step="0.1" value="-1.5" />
+              <span class="unit">s</span>
+              <button type="button" id="btnShiftSel">Selezionati</button>
+              <button type="button" id="btnShiftAll">Tutti</button>
+            </div>
           </div>
         </div>
       </div>
@@ -199,6 +203,8 @@
             <li>Live: avvia il cronometro e premi i tasti evento mentre guardi.</li>
             <li>Video: carica il file (o YouTube) e tagga sul current time.</li>
             <li>Dopo ogni evento usa il pannello per Squadra / Chi / Esito.</li>
+            <li>Fine primo tempo scarica da solo il CSV <em>…_primo-tempo.csv</em> e mette in pausa il crono.</li>
+            <li>Fine partita scarica <em>…_finale.csv</em>. Genera PDF usa gli eventi in pagina (serve.py).</li>
             <li>Importa il CSV su un altro video e sincronizza da un evento ancora.</li>
             <li>Correggi i timestamp (ritardo di tagging) con lo shift in secondi.</li>
           </ol>
@@ -214,7 +220,7 @@
   <div id="settingsOverlay" class="overlay hidden">
     <div class="sheet">
       <div class="sheet-head">
-        <h2>Rosa, tasti, ritardo</h2>
+        <h2>Rosa, tasti, preroll</h2>
         <button type="button" id="btnCloseSettings">Chiudi</button>
       </div>
       <div class="settings-grid">
@@ -225,20 +231,26 @@
           <textarea id="cfgKeepers" rows="6"></textarea>
         </label>
         <div class="stack nums">
-          <label>Durata default (s) <input id="cfgDuration" type="number" step="0.5" min="0" /></label>
+          <label>Durata fallback (s) <input id="cfgDuration" type="number" step="0.5" min="0" /></label>
           <label>Ritardo tagging (s) <input id="cfgDelay" type="number" step="0.1" />
             <small>Si sottrae al timestamp quando crei l'evento (es. 1.5 se premi sempre in ritardo).</small>
           </label>
-          <label>Preroll clip (s) <input id="cfgPreroll" type="number" step="0.5" min="0" /></label>
           <label>Portiere sticky
             <select id="cfgStickyKeeper"></select>
           </label>
         </div>
       </div>
-      <h3>Shortcut eventi</h3>
-      <div id="shortcutList" class="shortcut-list"></div>
+      <h3>Tasti, preroll e durata clip (default Dartfish)</h3>
+      <p class="muted settings-note">Il preroll è quanti secondi prima del tag parte la clip. La durata è la lunghezza dopo il tag.</p>
+      <div class="event-cfg-head">
+        <span>Evento</span>
+        <span>Tasto</span>
+        <span>Preroll</span>
+        <span>Durata</span>
+      </div>
+      <div id="shortcutList" class="event-cfg-list"></div>
       <div class="sheet-foot">
-        <button type="button" id="btnResetShortcuts">Ripristina tasti default</button>
+        <button type="button" id="btnResetShortcuts">Ripristina default Dartfish</button>
         <button type="button" class="primary" id="btnSaveSettings">Salva</button>
       </div>
     </div>

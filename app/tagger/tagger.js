@@ -11,33 +11,43 @@
   const DEFAULT_KEEPERS = ["bara", "gio"];
 
   const EVENT_DEFS = [
-    { id: "Tiro", shortcut: "z", color: "orange", group: "Azioni" },
-    { id: "Gol", shortcut: "g", color: "green", group: "Azioni" },
-    { id: "Assist", shortcut: "", color: "green", group: "Azioni" },
-    { id: "Autogol", shortcut: "", color: "red", group: "Azioni" },
-    { id: "Palla recuperata", shortcut: "r", color: "teal", group: "Possesso" },
-    { id: "Palla persa", shortcut: "e", color: "red", group: "Possesso" },
-    { id: "Passaggio sbagliato", shortcut: "", color: "red", group: "Possesso" },
-    { id: "Fallo", shortcut: "", color: "yellow", group: "Falli" },
-    { id: "Ammonizione", shortcut: "", color: "yellow", group: "Falli" },
-    { id: "Espulsione", shortcut: "", color: "red", group: "Falli" },
-    { id: "Laterale", shortcut: "l", color: "blue", group: "Palle inattive" },
-    { id: "Angolo", shortcut: "a", color: "blue", group: "Palle inattive" },
-    { id: "Punizione", shortcut: "p", color: "blue", group: "Palle inattive" },
-    { id: "Ripartenza", shortcut: "w", color: "purple", group: "Situazioni" },
-    { id: "5v4", shortcut: "q", color: "purple", group: "Situazioni" },
-    { id: "Timeout", shortcut: "t", color: "gray", group: "Situazioni" },
-    { id: "Da rivedere", shortcut: "v", color: "yellow", group: "Situazioni" },
-    { id: "Inizio", shortcut: "b", color: "gray", group: "Tempo" },
-    { id: "Fine primo tempo", shortcut: "", color: "gray", group: "Tempo" },
-    { id: "Inizio secondo tempo", shortcut: "", color: "gray", group: "Tempo" },
-    { id: "Fine partita", shortcut: "", color: "gray", group: "Tempo" },
+    { id: "Tiro", shortcut: "z", color: "orange", group: "Azioni", preroll: 8, duration: 13 },
+    { id: "Gol", shortcut: "g", color: "green", group: "Azioni", preroll: 16, duration: 25 },
+    { id: "Assist", shortcut: "", color: "green", group: "Azioni", preroll: 7, duration: 5 },
+    { id: "Autogol", shortcut: "", color: "red", group: "Azioni", preroll: 9, duration: 13 },
+    { id: "Palla recuperata", shortcut: "r", color: "teal", group: "Possesso", preroll: 9, duration: 15 },
+    { id: "Palla persa", shortcut: "e", color: "red", group: "Possesso", preroll: 9, duration: 15 },
+    { id: "Passaggio sbagliato", shortcut: "", color: "red", group: "Possesso", preroll: 6, duration: 12 },
+    { id: "Fallo", shortcut: "", color: "yellow", group: "Falli", preroll: 8, duration: 10 },
+    { id: "Ammonizione", shortcut: "", color: "yellow", group: "Falli", preroll: 8, duration: 12 },
+    { id: "Espulsione", shortcut: "", color: "red", group: "Falli", preroll: 5, duration: 10 },
+    { id: "Laterale", shortcut: "l", color: "blue", group: "Palle inattive", preroll: 5, duration: 12 },
+    { id: "Angolo", shortcut: "a", color: "blue", group: "Palle inattive", preroll: 4, duration: 12 },
+    { id: "Punizione", shortcut: "p", color: "blue", group: "Palle inattive", preroll: 5, duration: 13 },
+    { id: "Tiro libero", shortcut: "", color: "blue", group: "Palle inattive", preroll: 5, duration: 11 },
+    { id: "Rigore", shortcut: "", color: "blue", group: "Palle inattive", preroll: 9, duration: 14 },
+    { id: "Ripartenza", shortcut: "w", color: "purple", group: "Situazioni", preroll: 9, duration: 15 },
+    { id: "5v4", shortcut: "q", color: "purple", group: "Situazioni", preroll: 5, duration: 10 },
+    { id: "4v3", shortcut: "", color: "purple", group: "Situazioni", preroll: 5, duration: 10 },
+    { id: "Timeout", shortcut: "t", color: "gray", group: "Situazioni", preroll: 5, duration: 10 },
+    { id: "Da rivedere", shortcut: "v", color: "yellow", group: "Situazioni", preroll: 13, duration: 15 },
+    { id: "Inizio", shortcut: "b", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
+    { id: "Fine primo tempo", shortcut: "", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
+    { id: "Inizio secondo tempo", shortcut: "", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
+    { id: "Fine partita", shortcut: "", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
   ];
   const SHORTCUTS_VERSION = 2;
+  const CLIP_TIMING_VERSION = 1;
+
+  function defaultMap(field) {
+    return Object.fromEntries(EVENT_DEFS.map((e) => [e.id, e[field]]));
+  }
 
   const ESITI_BY_EVENT = {
     Tiro: ["Parata", "Gol", "Palo", "Fuori", "Ribattuto", "Assist"],
     Punizione: ["Parata", "Gol", "Palo", "Fuori", "Ribattuto"],
+    "Tiro libero": ["Parata", "Gol", "Palo", "Fuori", "Ribattuto"],
+    Rigore: ["Parata", "Gol", "Palo", "Fuori", "Ribattuto"],
     Gol: ["Costruzione", "Transizione", "Palla inattiva", "Errore"],
     Autogol: ["Costruzione", "Transizione", "Palla inattiva", "Errore"],
     "Palla persa": ["Ripartenza", "Costruzione", "Fuori"],
@@ -57,7 +67,14 @@
     ["Ctrl+E", "Esporta CSV"],
     ["↑ / ↓", "Evento precedente / successivo"],
     ["X / C", "Squadra Noi / Loro"],
+    ["1 / 2 / 3", "Zona 1 / 2 / 3"],
     ["?", "Questa guida"],
+  ];
+
+  const ZONE_DEFS = [
+    { key: "1", label: "Zona 1" },
+    { key: "2", label: "Zona 2" },
+    { key: "3", label: "Zona 3" },
   ];
 
   const $ = (id) => document.getElementById(id);
@@ -72,10 +89,13 @@
     players: [...DEFAULT_PLAYERS],
     keepers: [...DEFAULT_KEEPERS],
     shortcuts: Object.fromEntries(EVENT_DEFS.map((e) => [e.id, e.shortcut])),
+    prerolls: defaultMap("preroll"),
+    durations: defaultMap("duration"),
     durationSec: 5,
     delaySec: 0,
     prerollSec: 2,
     stickyKeeper: "bara",
+    syncOpen: false,
     live: { running: false, startedAt: 0, accumulated: 0 },
     videoKind: null,
     videoUrl: null,
@@ -130,6 +150,26 @@
   }
 
   function clampTime(sec) { return Math.max(0, sec); }
+
+  function prerollFor(evento) {
+    const v = Number(state.prerolls[evento]);
+    if (Number.isFinite(v)) return Math.max(0, v);
+    const def = EVENT_DEFS.find((d) => d.id === evento);
+    if (def && Number.isFinite(def.preroll)) return def.preroll;
+    return Math.max(0, Number(state.prerollSec) || 0);
+  }
+
+  function durationFor(evento) {
+    const v = Number(state.durations[evento]);
+    if (Number.isFinite(v) && v > 0) return v;
+    const def = EVENT_DEFS.find((d) => d.id === evento);
+    if (def && Number.isFinite(def.duration) && def.duration > 0) return def.duration;
+    return Number(state.durationSec) || 5;
+  }
+
+  function clipStart(ev) {
+    return Math.max(0, parseTime(ev.Position) - prerollFor(ev.Evento));
+  }
 
   function nowSeconds() {
     const raw = state.mode === "video" && hasMedia() ? getMediaTime() : liveSeconds();
@@ -220,10 +260,14 @@
         keepers: state.keepers,
         shortcuts: state.shortcuts,
         shortcutsVersion: SHORTCUTS_VERSION,
+        prerolls: state.prerolls,
+        durations: state.durations,
+        clipTimingVersion: CLIP_TIMING_VERSION,
         durationSec: state.durationSec,
         delaySec: state.delaySec,
         prerollSec: state.prerollSec,
         stickyKeeper: state.stickyKeeper,
+        syncOpen: state.syncOpen,
         liveAccumulated: state.live.running
           ? state.live.accumulated + (Date.now() - state.live.startedAt)
           : state.live.accumulated,
@@ -247,10 +291,17 @@
         shortcuts: dump.shortcutsVersion === SHORTCUTS_VERSION
           ? { ...state.shortcuts, ...(dump.shortcuts || {}) }
           : Object.fromEntries(EVENT_DEFS.map((e) => [e.id, e.shortcut])),
+        prerolls: dump.clipTimingVersion === CLIP_TIMING_VERSION
+          ? { ...defaultMap("preroll"), ...(dump.prerolls || {}) }
+          : defaultMap("preroll"),
+        durations: dump.clipTimingVersion === CLIP_TIMING_VERSION
+          ? { ...defaultMap("duration"), ...(dump.durations || {}) }
+          : defaultMap("duration"),
         durationSec: dump.durationSec ?? 5,
         delaySec: dump.delaySec ?? 0,
         prerollSec: dump.prerollSec ?? 2,
         stickyKeeper: dump.stickyKeeper || "",
+        syncOpen: !!dump.syncOpen,
       });
       state.live.accumulated = dump.liveAccumulated || 0;
     } catch {}
@@ -288,7 +339,7 @@
       id: uid(),
       Name: evento,
       Position: formatTime(nowSeconds()),
-      Duration: formatTime(Number(state.durationSec) || 5),
+      Duration: formatTime(durationFor(evento)),
       Data: dateCsv(state.matchDate),
       Evento: evento,
       Portiere: state.stickyKeeper || "",
@@ -306,6 +357,13 @@
     renderAll();
     toast(`${evento}  ${row.Position}`);
     scrollToEvent(row.id);
+    if (evento === "Fine primo tempo") {
+      pauseClock();
+      exportCsv("primo-tempo");
+    } else if (evento === "Fine partita") {
+      pauseClock();
+      exportCsv("finale");
+    }
   }
 
   function applyKeyword(col, value) {
@@ -397,8 +455,8 @@
 
   function playClip(ev) {
     if (!ev || !hasMedia()) return;
-    const start = Math.max(0, parseTime(ev.Position) - (Number(state.prerollSec) || 0));
-    const end = parseTime(ev.Position) + parseTime(ev.Duration || "0:00:05.00");
+    const start = clipStart(ev);
+    const end = parseTime(ev.Position) + parseTime(ev.Duration || formatTime(durationFor(ev.Evento)));
     mediaSeek(start);
     mediaPlay();
     state.playlist = { queue: [], end };
@@ -411,8 +469,8 @@
     const first = list[0];
     state.selected = [first.id];
     renderTable();
-    const start = Math.max(0, parseTime(first.Position) - (Number(state.prerollSec) || 0));
-    const end = parseTime(first.Position) + parseTime(first.Duration || "0:00:05.00");
+    const start = clipStart(first);
+    const end = parseTime(first.Position) + parseTime(first.Duration || formatTime(durationFor(first.Evento)));
     mediaSeek(start);
     mediaPlay();
     state.playlist = { queue: queue.slice(1), end };
@@ -431,8 +489,8 @@
       if (!ev) { state.playlist = null; return; }
       state.selected = [ev.id];
       renderTable();
-      const start = Math.max(0, parseTime(ev.Position) - (Number(state.prerollSec) || 0));
-      state.playlist.end = parseTime(ev.Position) + parseTime(ev.Duration || "0:00:05.00");
+      const start = clipStart(ev);
+      state.playlist.end = parseTime(ev.Position) + parseTime(ev.Duration || formatTime(durationFor(ev.Evento)));
       mediaSeek(start);
       mediaPlay();
     }
@@ -501,7 +559,11 @@
     return out;
   }
 
-  function exportCsv() {
+  function matchSlug() {
+    return (state.matchName || "partita").replace(/\s+/g, "-").toLowerCase();
+  }
+
+  function csvText() {
     const lines = [CSV_COLS.join(";")];
     for (const e of sortedEvents()) {
       const data = e.Data || dateCsv(state.matchDate);
@@ -520,14 +582,77 @@
       };
       lines.push(CSV_COLS.map((c) => csvEscape(row[c])).join(";"));
     }
-    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    return "\uFEFF" + lines.join("\r\n");
+  }
+
+  function csvFileName(suffix) {
+    const tail = typeof suffix === "string" && suffix ? suffix : "eventi";
+    return `${state.matchDate || "export"}_${matchSlug()}_${tail}.csv`;
+  }
+
+  function downloadFile(filename, blob) {
     const a = document.createElement("a");
-    const slug = (state.matchName || "partita").replace(/\s+/g, "-").toLowerCase();
     a.href = URL.createObjectURL(blob);
-    a.download = `${state.matchDate || "export"}_${slug}_eventi.csv`;
+    a.download = filename;
     a.click();
-    URL.revokeObjectURL(a.href);
-    toast(`Esportati ${state.events.length} eventi`);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function exportCsv(suffix) {
+    if (suffix && typeof suffix !== "string") suffix = "";
+    downloadFile(csvFileName(suffix), new Blob([csvText()], { type: "text/csv;charset=utf-8" }));
+    const label = suffix === "primo-tempo" ? " (primo tempo)" : suffix === "finale" ? " (finale)" : "";
+    toast(`Esportati ${state.events.length} eventi${label}`);
+  }
+
+  function reportApiUrl() {
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      return `${location.origin}/api/report`;
+    }
+    return "http://127.0.0.1:8765/api/report";
+  }
+
+  async function generatePdf() {
+    if (!state.events.length) {
+      toast("Nessun evento da mettere nel report");
+      return;
+    }
+    const btn = $("btnPdf");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "PDF…";
+    }
+    try {
+      const res = await fetch(reportApiUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csv: csvText(),
+          avversario: state.matchName || "Avversario",
+        }),
+      });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j && j.error) msg = j.error;
+        } catch { /* corpo non JSON */ }
+        throw new Error(msg);
+      }
+      downloadFile(
+        `${state.matchDate || "export"}_${matchSlug()}_report.pdf`,
+        await res.blob(),
+      );
+      toast("PDF scaricato");
+    } catch (err) {
+      console.warn(err);
+      toast("PDF: avvia python app/tagger/serve.py e apri http://127.0.0.1:8765/");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Genera PDF";
+      }
+    }
   }
 
   function importCsvFile(file) {
@@ -624,13 +749,12 @@
     }
     html += `</div></div>`;
 
-    html += `<div class="group"><h4>Dove / Lato</h4><div class="btns">`;
-    for (const z of ["0", "1", "2", "3"]) {
-      html += `<button type="button" class="tag" data-kw="Dove" data-val="${z}">Z${z}</button>`;
+    html += `<div class="group"><h4>Dove</h4><div class="btns">`;
+    for (const z of ZONE_DEFS) {
+      const on = prim && prim.Dove === z.label;
+      html += `<button type="button" class="tag${on ? " active" : ""}" data-kw="Dove" data-val="${esc(z.label)}"><span class="kbd">${z.key}</span>${esc(z.label)}</button>`;
     }
-    html += `<button type="button" class="tag" data-kw="Lato" data-val="Sx">Sx</button>
-             <button type="button" class="tag" data-kw="Lato" data-val="Dx">Dx</button>
-    </div></div>`;
+    html += `</div></div>`;
     host.innerHTML = html;
   }
 
@@ -753,15 +877,25 @@
     }
     $("liveStatus").textContent = state.live.running ? "IN CORSO" : "PRONTO";
     $("liveStatus").classList.toggle("on", state.live.running);
-    $("btnClockStart").textContent = state.live.running ? "In corso…" : (state.live.accumulated ? "Riprendi" : "Avvia cronometro");
+    $("btnClockStart").textContent = state.live.running ? "In corso…" : (state.live.accumulated ? "Riprendi" : "Avvia");
     if (state.selected.length) renderSyncMeta();
   }
 
+  function renderSyncBar() {
+    const open = !!state.syncOpen;
+    $("syncBody").classList.toggle("hidden", !open);
+    $("syncToggleHint").textContent = open ? "nascondi" : "mostra";
+    $("btnToggleSync").setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
   function renderMode() {
+    $("app").classList.toggle("mode-live", state.mode === "live");
+    $("app").classList.toggle("mode-video", state.mode === "video");
     $("modeLive").classList.toggle("active", state.mode === "live");
     $("modeVideo").classList.toggle("active", state.mode === "video");
     $("liveStage").classList.toggle("hidden", state.mode !== "live");
     $("videoStage").classList.toggle("hidden", state.mode !== "video");
+    renderSyncBar();
   }
 
   function renderAll() {
@@ -875,6 +1009,8 @@
     if (!key || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (key === "x") { applyKeyword("Squadra", "Noi"); ev.preventDefault(); return; }
     if (key === "c") { applyKeyword("Squadra", "Loro"); ev.preventDefault(); return; }
+    const zone = ZONE_DEFS.find((z) => z.key === key);
+    if (zone) { applyKeyword("Dove", zone.label); ev.preventDefault(); return; }
 
     for (const def of EVENT_DEFS) {
       const sc = shortcutOf(def.id);
@@ -991,11 +1127,15 @@
     $("cfgKeepers").value = state.keepers.join("\n");
     $("cfgDuration").value = state.durationSec;
     $("cfgDelay").value = state.delaySec;
-    $("cfgPreroll").value = state.prerollSec;
     $("cfgStickyKeeper").innerHTML = `<option value="">(nessuno)</option>` +
       state.keepers.map((k) => `<option ${k === state.stickyKeeper ? "selected" : ""}>${esc(k)}</option>`).join("");
     $("shortcutList").innerHTML = EVENT_DEFS.map((d) =>
-      `<label class="shortcut-row">${esc(d.id)} <input data-sc="${esc(d.id)}" maxlength="1" value="${esc(state.shortcuts[d.id] || "")}" /></label>`
+      `<div class="event-cfg-row">
+        <span>${esc(d.id)}</span>
+        <input data-sc="${esc(d.id)}" maxlength="1" value="${esc(state.shortcuts[d.id] || "")}" title="Tasto" />
+        <input data-pr="${esc(d.id)}" type="number" step="0.5" min="0" value="${prerollFor(d.id)}" title="Preroll (s)" />
+        <input data-du="${esc(d.id)}" type="number" step="0.5" min="0" value="${durationFor(d.id)}" title="Durata (s)" />
+      </div>`
     ).join("");
   }
 
@@ -1004,13 +1144,24 @@
     state.keepers = $("cfgKeepers").value.split("\n").map((s) => s.trim()).filter(Boolean);
     state.durationSec = Number($("cfgDuration").value) || 5;
     state.delaySec = Number($("cfgDelay").value) || 0;
-    state.prerollSec = Number($("cfgPreroll").value) || 0;
     state.stickyKeeper = $("cfgStickyKeeper").value;
-    const next = { ...state.shortcuts };
+    const nextSc = { ...state.shortcuts };
+    const nextPr = { ...state.prerolls };
+    const nextDu = { ...state.durations };
     for (const input of $("shortcutList").querySelectorAll("input")) {
-      next[input.dataset.sc] = input.value.trim().toLowerCase();
+      if (input.dataset.sc) nextSc[input.dataset.sc] = input.value.trim().toLowerCase();
+      if (input.dataset.pr) {
+        const n = Number(input.value);
+        nextPr[input.dataset.pr] = Number.isFinite(n) ? Math.max(0, n) : prerollFor(input.dataset.pr);
+      }
+      if (input.dataset.du) {
+        const n = Number(input.value);
+        nextDu[input.dataset.du] = Number.isFinite(n) && n > 0 ? n : durationFor(input.dataset.du);
+      }
     }
-    state.shortcuts = next;
+    state.shortcuts = nextSc;
+    state.prerolls = nextPr;
+    state.durations = nextDu;
     persist();
     toggleSettings(false);
     renderAll();
@@ -1038,7 +1189,8 @@
       toast("Sessione vuota");
     };
     $("btnUndo").onclick = undo;
-    $("btnExport").onclick = exportCsv;
+    $("btnExport").onclick = () => exportCsv();
+    $("btnPdf").onclick = () => generatePdf();
     $("btnImport").onclick = () => $("fileCsv").click();
     $("fileCsv").onchange = (e) => { const f = e.target.files[0]; if (f) importCsvFile(f); e.target.value = ""; };
     $("btnSettings").onclick = () => toggleSettings(true);
@@ -1046,7 +1198,14 @@
     $("btnSaveSettings").onclick = saveSettings;
     $("btnResetShortcuts").onclick = () => {
       state.shortcuts = Object.fromEntries(EVENT_DEFS.map((d) => [d.id, d.shortcut]));
+      state.prerolls = defaultMap("preroll");
+      state.durations = defaultMap("duration");
       toggleSettings(true);
+    };
+    $("btnToggleSync").onclick = () => {
+      state.syncOpen = !state.syncOpen;
+      persist();
+      renderSyncBar();
     };
     $("btnHelp").onclick = () => toggleHelp(true);
     $("btnCloseHelp").onclick = () => toggleHelp(false);
