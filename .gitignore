@@ -5,3 +5,5 @@ __pycache__/
 report_test.pdf
 report_partita.pdf
 *.csv
+app/tagger/sessioni/*
+!app/tagger/sessioni/.gitkeep

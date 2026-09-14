@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FMP Video</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; color: #e9eef6; font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+    #wrap { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+    #stage { flex: 1; min-height: 0; position: relative; background: #000; overflow: hidden; }
+    #video, #ytHost, #ytHost iframe, #ytFrame {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      max-width: 100%; max-height: 100%; object-fit: contain; background: #000; border: 0;
+    }
+    #bar {
+      flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      padding: 8px 12px; background: #121a26;
+    }
+    button {
+      background: #223044; color: #fff; border: 1px solid #2b3a50;
+      border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit;
+    }
+    button.primary { background: #3d8bfd; border-color: transparent; }
+    .time { font-variant-numeric: tabular-nums; color: #8b9bb4; margin-left: auto; }
+    .hint { flex: none; font-size: 12px; color: #8b9bb4; padding: 0 12px 8px; background: #121a26; }
+    #status {
+      position: absolute; inset: 0; display: grid; place-content: center;
+      text-align: center; color: #8b9bb4; padding: 24px; pointer-events: none;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="stage">
+      <div id="status">In attesa del video dal tagger…</div>
+      <video id="video" playsinline class="hidden"></video>
+      <div id="ytHost" class="hidden"></div>
+    </div>
+    <div id="bar">
+      <button type="button" id="btnPlay">Play</button>
+      <button type="button" class="primary" id="btnFs">Schermo intero</button>
+      <span class="time" id="clock">0:00:00 / 0:00:00</span>
+    </div>
+    <p class="hint">Trascina questa finestra sul secondo schermo, poi Schermo intero. I tasti restano sul tagger.</p>
+  </div>
+  <script>
+  (() => {
+    const CH = "fmp-tagger-player";
+    const $ = (id) => document.getElementById(id);
+    const bus = ("BroadcastChannel" in window) ? new BroadcastChannel(CH) : null;
+    let yt = null, ytReady = false, kind = null, localBlob = null, loaded = false;
+
+    function send(msg) {
+      msg.source = "player";
+      if (bus) bus.postMessage(msg);
+      if (window.opener && !window.opener.closed) {
+        try { window.opener.postMessage(msg, "*"); } catch {}
+      }
+    }
+
+    function setStatus(text) {
+      const el = $("status");
+      if (!el) return;
+      if (!text) { el.classList.add("hidden"); el.textContent = ""; return; }
+      el.classList.remove("hidden");
+      el.textContent = text;
+    }
+
+    function fmt(sec) {
+      sec = Math.max(0, Number(sec) || 0);
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
+    function timeNow() {
+      if (kind === "file") return $("video").currentTime || 0;
+      if (kind === "youtube" && yt && ytReady) {
+        try { return yt.getCurrentTime() || 0; } catch { return 0; }
+      }
+      return 0;
+    }
+    function durNow() {
+      if (kind === "file") return $("video").duration || 0;
+      if (kind === "youtube" && yt && ytReady) {
+        try { return yt.getDuration() || 0; } catch { return 0; }
+      }
+      return 0;
+    }
+    function playingNow() {
+      if (kind === "file") return !$("video").paused;
+      if (kind === "youtube" && yt && ytReady) {
+        try { return yt.getPlayerState() === 1; } catch { return false; }
+      }
+      return false;
+    }
+
+    function markLoaded() {
+      loaded = true;
+      setStatus("");
+      send({
+        type: "loaded",
+        time: timeNow(),
+        duration: durNow(),
+        paused: !playingNow(),
+      });
+    }
+
+    function pulse() {
+      if (!kind) send({ type: "ready" });
+      send({ type: "time", time: timeNow(), duration: durNow(), paused: !playingNow(), playing: playingNow() });
+      $("clock").textContent = fmt(timeNow()) + " / " + fmt(durNow());
+      $("btnPlay").textContent = playingNow() ? "Pausa" : "Play";
+    }
+
+    function play() {
+      if (kind === "file") $("video").play().catch(() => {});
+      else if (yt && yt.playVideo) yt.playVideo();
+    }
+    function pause() {
+      if (kind === "file") $("video").pause();
+      else if (yt && yt.pauseVideo) yt.pauseVideo();
+    }
+    function seek(t) {
+      t = Math.max(0, Number(t) || 0);
+      if (kind === "file") $("video").currentTime = t;
+      else if (yt && yt.seekTo) yt.seekTo(t, true);
+    }
+    function rate(r) {
+      r = Number(r) || 1;
+      if (kind === "file") $("video").playbackRate = r;
+      else if (yt && yt.setPlaybackRate) yt.setPlaybackRate(r);
+    }
+
+    function clearYt() {
+      if (yt && yt.destroy) { try { yt.destroy(); } catch {} }
+      yt = null; ytReady = false;
+      const stage = $("stage");
+      const old = $("ytHost");
+      if (old) old.remove();
+      const host = document.createElement("div");
+      host.id = "ytHost";
+      host.className = "hidden";
+      stage.appendChild(host);
+    }
+
+    function ytIdFrom(msg) {
+      if (msg && msg.videoId) return String(msg.videoId);
+      const raw = String((msg && (msg.ytUrl || msg.url)) || "");
+      const m = raw.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{6,})/);
+      return m ? m[1] : "";
+    }
+
+    function loadFile(msg) {
+      clearYt();
+      kind = "file";
+      loaded = false;
+      const v = $("video");
+      $("ytHost").classList.add("hidden");
+      v.classList.remove("hidden");
+      if (localBlob) { try { URL.revokeObjectURL(localBlob); } catch {} localBlob = null; }
+      let url = "";
+      if (msg.file instanceof Blob) {
+        localBlob = URL.createObjectURL(msg.file);
+        url = localBlob;
+      } else if (msg.blobUrl) {
+        url = msg.blobUrl;
+      }
+      if (!url) {
+        setStatus("Nessun file ricevuto dal tagger");
+        return;
+      }
+      setStatus("Caricamento video…");
+      v.onerror = () => setStatus("Impossibile aprire il video in questa finestra");
+      v.onloadedmetadata = () => {
+        seek(msg.time || 0);
+        rate(msg.rate || 1);
+        markLoaded();
+        if (!msg.paused) play();
+        pulse();
+      };
+      v.src = url;
+      v.load();
+    }
+
+    function loadYt(msg) {
+      const id = ytIdFrom(msg);
+      if (!id) { setStatus("URL YouTube non valido"); return; }
+      $("video").removeAttribute("src");
+      $("video").classList.add("hidden");
+      clearYt();
+      kind = "youtube";
+      loaded = false;
+      setStatus("Caricamento YouTube…");
+      const host = $("ytHost");
+      host.classList.remove("hidden");
+      const boot = () => {
+        try {
+          yt = new YT.Player("ytHost", {
+            videoId: id,
+            width: "100%",
+            height: "100%",
+            playerVars: {
+              rel: 0,
+              modestbranding: 1,
+              playsinline: 1,
+              origin: location.origin,
+              start: Math.floor(msg.time || 0),
+            },
+            events: {
+              onReady: () => {
+                ytReady = true;
+                seek(msg.time || 0);
+                rate(msg.rate || 1);
+                markLoaded();
+                if (!msg.paused) play();
+                pulse();
+              },
+              onError: () => setStatus("YouTube non ha caricato il video"),
+            },
+          });
+        } catch (err) {
+          setStatus("Errore YouTube: " + (err && err.message ? err.message : err));
+        }
+      };
+      if (window.YT && window.YT.Player) boot();
+      else {
+        if (!document.getElementById("ytApi")) {
+          const tag = document.createElement("script");
+          tag.id = "ytApi";
+          tag.src = "https://www.youtube.com/iframe_api";
+          document.head.appendChild(tag);
+        }
+        window.onYouTubeIframeAPIReady = boot;
+      }
+    }
+
+    function onMsg(msg) {
+      if (!msg || msg.source === "player") return;
+      if (msg.type === "load") {
+        if (msg.kind === "file") loadFile(msg);
+        else if (msg.kind === "youtube") loadYt(msg);
+      } else if (msg.type === "cmd") {
+        if (msg.cmd === "play") play();
+        if (msg.cmd === "pause") pause();
+        if (msg.cmd === "seek") seek(msg.value);
+        if (msg.cmd === "rate") rate(msg.value);
+        if (msg.cmd === "fullscreen") goFs();
+      } else if (msg.type === "hello") {
+        send({ type: "ready" });
+        if (loaded) markLoaded();
+      }
+    }
+
+    function goFs() {
+      const el = $("stage");
+      if (!document.fullscreenElement) el.requestFullscreen().catch(() => {});
+      else document.exitFullscreen().catch(() => {});
+    }
+
+    if (bus) bus.onmessage = (e) => onMsg(e.data);
+    window.addEventListener("message", (e) => onMsg(e.data));
+    $("btnPlay").onclick = () => playingNow() ? pause() : play();
+    $("btnFs").onclick = goFs;
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "f" || e.key === "F") { e.preventDefault(); goFs(); }
+      if (e.key === " ") { e.preventDefault(); playingNow() ? pause() : play(); }
+    });
+    window.addEventListener("beforeunload", () => send({ type: "closed" }));
+    send({ type: "ready" });
+    setInterval(pulse, 250);
+  })();
+  </script>
+</body>
+</html>

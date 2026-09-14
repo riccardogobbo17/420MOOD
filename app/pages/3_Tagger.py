@@ -35,8 +35,10 @@ with col_a:
     st.markdown(
         """
 **Live** — cronometro compatto e pannello tagging a tutta larghezza.
-**Video** — carica il file (o YouTube), click su un evento per saltare a quel momento.
-**Sync** — in Video, apri *Sincronizzazione* e allinea da un evento ancora.
+**Video** — file o YouTube, cambiabili in qualsiasi momento. Click su un evento per saltare lì.
+**Sessione** — *Salva sessione* (JSON) prima di chiudere; *Carica sessione* per riprendere. YouTube torna da solo, un file locale va ricollegato.
+**DB** — *Invia a DB* carica gli eventi su Supabase come in Admin (serve.py).
+**Secondo schermo** — *Apri video su altra finestra*, trascinala sulla TV, Schermo intero.
         """
     )
 with col_b:

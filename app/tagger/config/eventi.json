@@ -1,0 +1,196 @@
+{
+  "eventi": [
+    {
+      "id": "Tiro",
+      "shortcut": "z",
+      "color": "orange",
+      "group": "Azioni",
+      "preroll": 8.0,
+      "duration": 13.0
+    },
+    {
+      "id": "Gol",
+      "shortcut": "g",
+      "color": "green",
+      "group": "Azioni",
+      "preroll": 16.0,
+      "duration": 25.0
+    },
+    {
+      "id": "Assist",
+      "shortcut": "",
+      "color": "green",
+      "group": "Azioni",
+      "preroll": 7.0,
+      "duration": 5.0
+    },
+    {
+      "id": "Autogol",
+      "shortcut": "",
+      "color": "red",
+      "group": "Azioni",
+      "preroll": 9.0,
+      "duration": 13.0
+    },
+    {
+      "id": "Palla recuperata",
+      "shortcut": "r",
+      "color": "teal",
+      "group": "Possesso",
+      "preroll": 9.0,
+      "duration": 15.0
+    },
+    {
+      "id": "Palla persa",
+      "shortcut": "e",
+      "color": "red",
+      "group": "Possesso",
+      "preroll": 9.0,
+      "duration": 15.0
+    },
+    {
+      "id": "Passaggio sbagliato",
+      "shortcut": "",
+      "color": "red",
+      "group": "Possesso",
+      "preroll": 6.0,
+      "duration": 12.0
+    },
+    {
+      "id": "Fallo",
+      "shortcut": "",
+      "color": "yellow",
+      "group": "Falli",
+      "preroll": 8.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Ammonizione",
+      "shortcut": "",
+      "color": "yellow",
+      "group": "Falli",
+      "preroll": 8.0,
+      "duration": 12.0
+    },
+    {
+      "id": "Espulsione",
+      "shortcut": "",
+      "color": "red",
+      "group": "Falli",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Laterale",
+      "shortcut": "l",
+      "color": "blue",
+      "group": "Palle inattive",
+      "preroll": 5.0,
+      "duration": 12.0
+    },
+    {
+      "id": "Angolo",
+      "shortcut": "a",
+      "color": "blue",
+      "group": "Palle inattive",
+      "preroll": 4.0,
+      "duration": 12.0
+    },
+    {
+      "id": "Punizione",
+      "shortcut": "p",
+      "color": "blue",
+      "group": "Palle inattive",
+      "preroll": 5.0,
+      "duration": 13.0
+    },
+    {
+      "id": "Tiro libero",
+      "shortcut": "",
+      "color": "blue",
+      "group": "Palle inattive",
+      "preroll": 5.0,
+      "duration": 11.0
+    },
+    {
+      "id": "Rigore",
+      "shortcut": "",
+      "color": "blue",
+      "group": "Palle inattive",
+      "preroll": 9.0,
+      "duration": 14.0
+    },
+    {
+      "id": "Ripartenza",
+      "shortcut": "w",
+      "color": "purple",
+      "group": "Situazioni",
+      "preroll": 9.0,
+      "duration": 15.0
+    },
+    {
+      "id": "5v4",
+      "shortcut": "q",
+      "color": "purple",
+      "group": "Situazioni",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "4v3",
+      "shortcut": "",
+      "color": "purple",
+      "group": "Situazioni",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Timeout",
+      "shortcut": "t",
+      "color": "gray",
+      "group": "Situazioni",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Da rivedere",
+      "shortcut": "v",
+      "color": "yellow",
+      "group": "Situazioni",
+      "preroll": 13.0,
+      "duration": 15.0
+    },
+    {
+      "id": "Inizio",
+      "shortcut": "b",
+      "color": "gray",
+      "group": "Tempo",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Fine primo tempo",
+      "shortcut": "",
+      "color": "gray",
+      "group": "Tempo",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Inizio secondo tempo",
+      "shortcut": "",
+      "color": "gray",
+      "group": "Tempo",
+      "preroll": 5.0,
+      "duration": 10.0
+    },
+    {
+      "id": "Fine partita",
+      "shortcut": "",
+      "color": "gray",
+      "group": "Tempo",
+      "preroll": 5.0,
+      "duration": 10.0
+    }
+  ]
+}

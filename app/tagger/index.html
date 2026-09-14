@@ -31,17 +31,38 @@
 
       <div class="clock-wrap" title="Tempo usato per i nuovi eventi">
         <span class="clock-label" id="clockLabel">CRONO</span>
-        <span class="clock" id="clock">0:00:00.00</span>
+        <span class="clock" id="clock">0:00:00</span>
       </div>
       <div class="score" id="score" title="Gol Noi – Gol Loro">0 – 0</div>
       <div class="event-count" id="eventCount">0 eventi</div>
 
       <div class="top-actions">
-        <button type="button" id="btnNew">Nuova sessione</button>
-        <button type="button" id="btnUndo" title="Ctrl+Z">Annulla</button>
-        <button type="button" id="btnImport">Importa CSV</button>
-        <button type="button" class="primary" id="btnExport">Esporta CSV</button>
-        <button type="button" id="btnPdf" title="Richiede python app/tagger/serve.py">Genera PDF</button>
+        <div class="menu" id="sessionWrap">
+          <button type="button" id="btnSessionMenu">Sessione ▾</button>
+          <div id="sessionMenu" class="menu-pop hidden">
+            <button type="button" id="btnNew">Nuova sessione</button>
+            <button type="button" id="btnSaveSession">Salva sessione</button>
+            <button type="button" id="btnLoadSession">Carica sessione</button>
+            <button type="button" id="btnImport">Importa CSV</button>
+          </div>
+        </div>
+        <div class="menu" id="exportWrap">
+          <button type="button" class="primary" id="btnExportMenu">Esporta ▾</button>
+          <div id="exportMenu" class="menu-pop hidden">
+            <button type="button" id="btnExport">CSV tutti</button>
+            <button type="button" id="btnExportSel">CSV selezionati</button>
+            <button type="button" id="btnExportClips">Clip list JSON</button>
+            <button type="button" id="btnExportM3u">Playlist M3U</button>
+            <button type="button" id="btnExportFfmpeg">Script ffmpeg</button>
+          </div>
+        </div>
+        <div class="menu" id="dbWrap">
+          <button type="button" id="btnDbMenu" title="Richiede python app/tagger/serve.py">Invia ▾</button>
+          <div id="dbMenu" class="menu-pop hidden">
+            <button type="button" id="btnPushDb">Invia a DB</button>
+            <button type="button" id="btnPdf">Genera PDF</button>
+          </div>
+        </div>
         <button type="button" id="btnSettings">Rosa / tasti</button>
         <button type="button" id="btnHelp" title="?">?</button>
       </div>
@@ -52,7 +73,7 @@
         <div id="liveStage">
           <div class="live-card">
             <div class="live-kicker" id="liveStatus">PRONTO</div>
-            <div class="live-clock" id="liveClock">0:00:00.00</div>
+            <div class="live-clock" id="liveClock">0:00:00</div>
             <div class="live-actions">
               <button type="button" class="primary" id="btnClockStart">Avvia</button>
               <button type="button" id="btnClockPause">Pausa</button>
@@ -62,88 +83,132 @@
         </div>
 
         <div id="videoStage" class="hidden">
-          <div id="dropzone">
-            <p><strong>Trascina un video</strong> oppure</p>
-            <div class="drop-actions">
-              <button type="button" class="primary" id="btnPickVideo">Scegli file</button>
-              <span class="or">oppure YouTube</span>
-              <input id="ytUrl" type="text" placeholder="https://youtube.com/watch?v=..." />
-              <button type="button" id="btnLoadYt">Carica</button>
+          <div id="sourceFold" class="fold">
+            <button type="button" class="fold-toggle" id="btnToggleSource" aria-expanded="false">
+              <span class="chevron" aria-hidden="true">›</span>
+              <span>Sorgente</span>
+              <span class="fold-meta" id="sourceHint">File o YouTube</span>
+            </button>
+            <div id="sourceBody" class="fold-body hidden">
+              <div id="sourceBar">
+                <button type="button" class="primary" id="btnPickVideo">File locale</button>
+                <span class="or">o</span>
+                <input id="ytUrl" type="text" placeholder="https://youtube.com/watch?v=..." />
+                <button type="button" id="btnLoadYt">Carica YT</button>
+              </div>
+              <div id="reattachBar" class="hidden">
+                <span>Ricollega il video locale: <strong id="reattachName"></strong></span>
+                <button type="button" class="primary" id="btnReattach">Scegli lo stesso file</button>
+              </div>
             </div>
+          </div>
+          <div id="dropzone">
+            <p><strong>Trascina un video</strong> oppure apri Sorgente (file o YouTube).</p>
           </div>
           <div id="mediaWrap" class="hidden">
             <video id="video" playsinline></video>
             <div id="ytHost" class="hidden"></div>
+            <div id="popoutPlaceholder" class="hidden">
+              <p>Video sull'altra finestra.</p>
+              <p class="muted">Trascinala sul secondo schermo e premi Schermo intero lì.</p>
+              <button type="button" id="btnFocusPopout">Riporta in primo piano</button>
+            </div>
           </div>
           <div id="timeline" title="Clicca un marker per andare all'evento">
             <div id="playhead"></div>
             <div id="markers"></div>
           </div>
-          <div id="videoControls">
-            <button type="button" id="btnPlay" title="Spazio">Play</button>
-            <button type="button" id="btnSkipBack" title="←">−1s</button>
-            <button type="button" id="btnSkipFwd" title="→">+1s</button>
-            <button type="button" id="btnSkipBack5" title="Shift+←">−5s</button>
-            <button type="button" id="btnSkipFwd5" title="Shift+→">+5s</button>
-            <label class="rate">Velocità
-              <select id="playbackRate">
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option>
-                <option value="1" selected>1×</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.5×</option>
-                <option value="2">2×</option>
-              </select>
-            </label>
-            <span class="vid-time" id="vidTime">0:00:00 / 0:00:00</span>
-            <button type="button" id="btnSetIn" title="Shift+I">In</button>
-            <button type="button" id="btnSetOut" title="Shift+O">Out</button>
-            <button type="button" id="btnPlayEvent" title="Invio">Play clip</button>
-            <button type="button" id="btnPlayFiltered">Play filtrati</button>
-            <button type="button" id="btnChangeVideo">Cambia video</button>
+          <div id="controlsFold" class="fold">
+            <button type="button" class="fold-toggle" id="btnToggleControls" aria-expanded="false">
+              <span class="chevron" aria-hidden="true">›</span>
+              <span>Riproduzione</span>
+              <span class="fold-meta vid-time" id="vidTime">0:00:00 / 0:00:00</span>
+            </button>
+            <div id="videoControls" class="fold-body hidden">
+              <button type="button" id="btnPlay" title="Spazio">Play</button>
+              <button type="button" id="btnSkipBack" title="←">−1s</button>
+              <button type="button" id="btnSkipFwd" title="→">+1s</button>
+              <button type="button" id="btnSkipBack5" title="Shift+←">−5s</button>
+              <button type="button" id="btnSkipFwd5" title="Shift+→">+5s</button>
+              <label class="rate">Velocità
+                <select id="playbackRate">
+                  <option value="0.25">0.25×</option>
+                  <option value="0.5">0.5×</option>
+                  <option value="0.75">0.75×</option>
+                  <option value="1" selected>1×</option>
+                  <option value="1.25">1.25×</option>
+                  <option value="1.5">1.5×</option>
+                  <option value="2">2×</option>
+                </select>
+              </label>
+              <button type="button" id="btnSetIn" title="Shift+I">In</button>
+              <button type="button" id="btnSetOut" title="Shift+O">Out</button>
+              <button type="button" id="btnPlayEvent" title="Invio">Play clip</button>
+              <button type="button" id="btnPlayFiltered">Play filtrati</button>
+              <button type="button" id="btnChangeVideo">Cambia video</button>
+              <button type="button" id="btnPopout">Apri video su altra finestra</button>
+              <button type="button" id="btnFullscreen">Schermo intero qui</button>
+            </div>
+          </div>
+          <div id="syncBar" class="fold">
+            <button type="button" id="btnToggleSync" class="fold-toggle" aria-expanded="false">
+              <span class="chevron" aria-hidden="true">›</span>
+              <span>Sincronizzazione</span>
+            </button>
+            <div id="syncBody" class="fold-body hidden">
+              <div class="sync-block">
+                <span class="sync-title">Sincronizza sul video</span>
+                <span class="sync-meta" id="syncMeta">Seleziona un evento ancora, posiziona il video sul momento giusto, poi applica.</span>
+                <button type="button" class="primary" id="btnSyncAll">Allinea tutti</button>
+                <button type="button" id="btnSyncFrom">Da questo in poi</button>
+              </div>
+              <div class="sync-block">
+                <span class="sync-title">Correggi ritardo</span>
+                <input id="shiftSec" type="number" step="0.1" value="-1.5" />
+                <span class="unit">s</span>
+                <button type="button" id="btnShiftSel">Selezionati</button>
+                <button type="button" id="btnShiftAll">Tutti</button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div id="syncBar">
-          <button type="button" id="btnToggleSync" class="sync-toggle" aria-expanded="false">
-            <span>Sincronizzazione</span>
-            <span class="sync-toggle-hint" id="syncToggleHint">mostra</span>
+        <div id="panelDock" class="fold">
+          <button type="button" class="fold-toggle" id="btnDockPanel" aria-expanded="false">
+            <span class="chevron" aria-hidden="true">›</span>
+            <span>Pannello tagging</span>
           </button>
-          <div id="syncBody" class="hidden">
-            <div class="sync-block">
-              <span class="sync-title">Sincronizza sul video</span>
-              <span class="sync-meta" id="syncMeta">Seleziona un evento ancora, posiziona il video sul momento giusto, poi applica.</span>
-              <button type="button" class="primary" id="btnSyncAll">Allinea tutti</button>
-              <button type="button" id="btnSyncFrom">Da questo in poi</button>
-            </div>
-            <div class="sync-block">
-              <span class="sync-title">Correggi ritardo</span>
-              <input id="shiftSec" type="number" step="0.1" value="-1.5" />
-              <span class="unit">s</span>
-              <button type="button" id="btnShiftSel">Selezionati</button>
-              <button type="button" id="btnShiftAll">Tutti</button>
-            </div>
-          </div>
         </div>
       </div>
 
-      <aside id="panel">
-        <div class="panel-head">
-          <strong>Pannello tagging</strong>
-          <span class="muted">evento, poi keyword</span>
+      <div id="splitH" class="split split-h" role="separator" aria-orientation="vertical" title="Trascina per ridimensionare il pannello"></div>
+
+      <aside id="panel" class="fold open">
+        <button type="button" class="fold-toggle" id="btnTogglePanel" aria-expanded="true">
+          <span class="chevron" aria-hidden="true">›</span>
+          <span>Pannello tagging</span>
+        </button>
+        <div id="panelInner" class="fold-body">
+          <div id="pendingBox" class="pending hidden"></div>
+          <div id="panelBody"></div>
         </div>
-        <div id="pendingBox" class="pending hidden"></div>
-        <div id="panelBody"></div>
       </aside>
     </section>
 
-    <section id="eventsPane">
+    <div id="splitV" class="split split-v" role="separator" aria-orientation="horizontal" title="Trascina per ridimensionare video e tabella"></div>
+
+    <section id="eventsPane" class="fold open">
+      <button type="button" class="fold-toggle" id="btnToggleEvents" aria-expanded="true">
+        <span class="chevron" aria-hidden="true">›</span>
+        <span>Eventi</span>
+        <span class="fold-meta" id="eventFoldMeta">0 eventi</span>
+      </button>
+      <div id="eventsInner">
       <div id="eventsToolbar">
         <input id="filterText" type="search" placeholder="Filtra eventi, giocatore, esito…" />
-        <select id="filterEvento">
-          <option value="">Tutti gli eventi</option>
-        </select>
+        <div class="menu filter-types" id="filterEventoWrap">
+          <button type="button" id="btnFilterEvento" title="Scegli uno o più tipi di evento">Tutti i tipi ▾</button>
+          <div id="filterEventoMenu" class="menu-pop hidden"></div>
+        </div>
         <select id="filterSquadra">
           <option value="">Squadra</option>
           <option value="Noi">Noi</option>
@@ -187,6 +252,7 @@
           <tbody id="eventsBody"></tbody>
         </table>
       </div>
+      </div>
     </section>
   </div>
 
@@ -201,12 +267,18 @@
           <h3>Flusso</h3>
           <ol>
             <li>Live: avvia il cronometro e premi i tasti evento mentre guardi.</li>
-            <li>Video: carica il file (o YouTube) e tagga sul current time.</li>
+            <li>Video: carica il file (o YouTube) e tagga sul current time. Sorgente, riproduzione, sincronizzazione, pannello tagging e lista eventi si aprono con la freccia ›.</li>
+            <li>Al tag, Position = tempo attuale − preroll di quell'evento (es. tag a 0:00:30 con preroll 10s → 0:00:20). La durata è quella in impostazioni. Play clip parte da Position per Duration.</li>
             <li>Dopo ogni evento usa il pannello per Squadra / Chi / Esito.</li>
             <li>Fine primo tempo scarica da solo il CSV <em>…_primo-tempo.csv</em> e mette in pausa il crono.</li>
             <li>Fine partita scarica <em>…_finale.csv</em>. Genera PDF usa gli eventi in pagina (serve.py).</li>
-            <li>Importa il CSV su un altro video e sincronizza da un evento ancora.</li>
-            <li>Correggi i timestamp (ritardo di tagging) con lo shift in secondi.</li>
+            <li><strong>Salva sessione</strong> e autosave vanno in <code>app/tagger/sessioni/</code> come <em>avversario_data.json</em> (si sovrascrive). I CSV finiscono lì. Ctrl+C su serve.py fa un ultimo salvataggio. Al riavvio si riparte da <code>ultima.json</code>.</li>
+            <li>Esporta: CSV tutti / selezionati, clip list JSON, M3U, script ffmpeg. Un upload automatico su YouTube di clip concatenate non è fattibile da browser (servirebbero server, OAuth, re-encode e viola i ToS YT). Per un unico video: ffmpeg in locale e upload manuale.</li>
+            <li><strong>Invia a DB</strong> (serve.py): crea o scegli la partita e carica gli eventi su Supabase, come in Admin. Sostituisci gli eventi già presenti per non duplicarli.</li>
+            <li><strong>Apri video su altra finestra</strong>: spostala sul secondo schermo e fai Schermo intero. I tasti restano qui. Se il browser blocca il popup, clicca di nuovo il pulsante.</li>
+            <li>Trascina i bordi tra video, pannello e tabella per ridimensionare. Il video resta contenuto nella finestra (object-fit).</li>
+            <li>La barra indirizzi in alto è del browser. Per toglierla avvia <code>python app/tagger/serve.py</code>: apre Chrome in modalità app.</li>
+            <li><strong>Rosa / tasti</strong>: le modifiche si salvano in <code>app/tagger/config/</code> e tornano al prossimo avvio di serve.py.</li>
           </ol>
         </div>
         <div>
@@ -233,7 +305,7 @@
         <div class="stack nums">
           <label>Durata fallback (s) <input id="cfgDuration" type="number" step="0.5" min="0" /></label>
           <label>Ritardo tagging (s) <input id="cfgDelay" type="number" step="0.1" />
-            <small>Si sottrae al timestamp quando crei l'evento (es. 1.5 se premi sempre in ritardo).</small>
+            <small>Ritardo di reazione, a parte dal preroll: si sottrae al tempo attuale prima di applicare il preroll.</small>
           </label>
           <label>Portiere sticky
             <select id="cfgStickyKeeper"></select>
@@ -241,17 +313,78 @@
         </div>
       </div>
       <h3>Tasti, preroll e durata clip (default Dartfish)</h3>
-      <p class="muted settings-note">Il preroll è quanti secondi prima del tag parte la clip. La durata è la lunghezza dopo il tag.</p>
+      <p class="muted settings-note">Il preroll si sottrae al timestamp al momento del tag: se tagghi a 0:00:30 con preroll 10s, Position diventa 0:00:20 (inizio clip). La durata è la lunghezza della clip da quel punto. Il ritardo tagging è solo il lag di reazione.</p>
       <div class="event-cfg-head">
         <span>Evento</span>
         <span>Tasto</span>
         <span>Preroll</span>
         <span>Durata</span>
+        <span></span>
       </div>
       <div id="shortcutList" class="event-cfg-list"></div>
+      <div class="add-event">
+        <input id="newEventId" type="text" placeholder="Nuovo evento (es. Contropiede)" />
+        <input id="newEventGroup" type="text" placeholder="Gruppo" value="Azioni" />
+        <select id="newEventColor">
+          <option value="orange">arancio</option>
+          <option value="green">verde</option>
+          <option value="red">rosso</option>
+          <option value="teal">teal</option>
+          <option value="yellow">giallo</option>
+          <option value="purple">viola</option>
+          <option value="blue">blu</option>
+          <option value="gray">grigio</option>
+        </select>
+        <button type="button" id="btnAddEvent">Aggiungi evento</button>
+      </div>
+      <div class="settings-grid attr-grid">
+        <label class="stack">Esiti / attributi (una riga: Evento: val1, val2)
+          <textarea id="cfgEsiti" rows="9" spellcheck="false"></textarea>
+        </label>
+        <label class="stack">Zone Dove (una riga: tasto = etichetta)
+          <textarea id="cfgZone" rows="6" spellcheck="false"></textarea>
+        </label>
+      </div>
+      <p class="muted settings-note" id="cfgPath">Salva scrive in <code>app/tagger/config/</code> (rosa, eventi, attributi, opzioni) e si ricarica al prossimo avvio di serve.py.</p>
       <div class="sheet-foot">
         <button type="button" id="btnResetShortcuts">Ripristina default Dartfish</button>
-        <button type="button" class="primary" id="btnSaveSettings">Salva</button>
+        <button type="button" class="primary" id="btnSaveSettings">Salva su disco</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pushOverlay" class="overlay hidden">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>Invia eventi a Supabase</h2>
+        <button type="button" id="btnClosePush">Chiudi</button>
+      </div>
+      <p class="muted settings-note">
+        Stesso flusso dell'Admin: tabella <code>partite2627</code> / <code>eventi2627</code>,
+        stessi campi del CSV. Serve <code>python app/tagger/serve.py</code>. Le chiavi restano sul server.
+      </p>
+      <div class="settings-grid">
+        <label class="stack">Partita esistente
+          <select id="pushPartita"></select>
+        </label>
+        <div class="stack nums">
+          <label>Avversario <input id="pushAvversario" type="text" /></label>
+          <label>Data <input id="pushData" type="date" /></label>
+          <label>Competizione <input id="pushCompetizione" type="text" value="Campionato" /></label>
+          <label>Categoria <input id="pushCategoria" type="text" value="Prima Squadra" /></label>
+          <label>Link YouTube <input id="pushYt" type="text" placeholder="opzionale" /></label>
+        </div>
+      </div>
+      <div class="push-opts">
+        <label><input type="radio" name="pushScope" id="pushScopeAll" checked /> Tutti gli eventi (<span id="pushCountAll">0</span>)</label>
+        <label><input type="radio" name="pushScope" id="pushScopeSel" /> Solo selezionati (<span id="pushCountSel">0</span>)</label>
+        <label><input type="checkbox" id="pushReplace" checked /> Sostituisci gli eventi già nel DB per questa partita</label>
+      </div>
+      <p class="muted" id="pushMatchInfo">Seleziona una partita o compilane una nuova.</p>
+      <div id="pushStatus" class="push-status"></div>
+      <div class="sheet-foot">
+        <button type="button" id="btnCreatePartita">Crea partita</button>
+        <button type="button" class="primary" id="btnDoPush">Carica eventi</button>
       </div>
     </div>
   </div>
@@ -259,6 +392,7 @@
   <div id="toast"></div>
   <input id="fileCsv" type="file" accept=".csv,text/csv" hidden />
   <input id="fileVideo" type="file" accept="video/*" hidden />
+  <input id="fileSession" type="file" accept="application/json,.json" hidden />
 
   <script src="tagger.js"></script>
 </body>
