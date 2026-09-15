@@ -68,7 +68,8 @@
       </div>
     </header>
 
-    <section id="stage">
+    <div id="workspace">
+      <div id="mainCol">
       <div id="playerPane">
         <div id="liveStage">
           <div class="live-card">
@@ -180,6 +181,58 @@
         </div>
       </div>
 
+      <div id="splitV" class="split split-v" role="separator" aria-orientation="horizontal" title="Trascina per ridimensionare video e tabella"></div>
+
+      <section id="eventsPane" class="fold open">
+        <button type="button" class="fold-toggle" id="btnToggleEvents" aria-expanded="true">
+          <span class="chevron" aria-hidden="true">›</span>
+          <span>Eventi</span>
+          <span class="fold-meta" id="eventFoldMeta">0 eventi</span>
+        </button>
+        <div id="eventsInner">
+        <div id="eventsToolbar">
+          <input id="filterText" type="search" placeholder="Filtra eventi, giocatore, esito…" />
+          <div class="menu filter-types" id="filterEventoWrap">
+            <button type="button" id="btnFilterEvento" title="Scegli uno o più tipi di evento">Tutti i tipi ▾</button>
+            <div id="filterEventoMenu" class="menu-pop hidden"></div>
+          </div>
+          <select id="filterSquadra">
+            <option value="">Squadra</option>
+            <option value="Noi">Noi</option>
+            <option value="Loro">Loro</option>
+            <option value="(vuota)">(vuota)</option>
+          </select>
+          <button type="button" id="btnSelectAll">Seleziona visibili</button>
+          <button type="button" id="btnDup">Duplica</button>
+          <button type="button" class="danger-ghost" id="btnDelete" title="Canc">Elimina</button>
+          <div class="spacer"></div>
+          <span class="muted" id="selInfo">Nessuna selezione</span>
+        </div>
+        <div id="inspector">
+          <label>Posizione <input id="insPosition" placeholder="0:00:00.00" /></label>
+          <label>Evento <input id="insEvento" /></label>
+          <label>Video <input id="insVideo" placeholder="Y" /></label>
+          <label>Esito <input id="insEsito" /></label>
+          <label>Chi <input id="insChi" /></label>
+          <label>Squadra <input id="insSquadra" /></label>
+          <label>Portiere <input id="insPortiere" /></label>
+          <label>Dove <input id="insDove" /></label>
+          <label>Lato <input id="insLato" /></label>
+          <label>Durata <input id="insDuration" placeholder="0:00:05.00" /></label>
+        </div>
+        <div id="tableWrap">
+          <table id="eventsTable">
+            <colgroup id="eventsCols"></colgroup>
+            <thead>
+              <tr id="eventsHead"></tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+        </div>
+      </section>
+      </div>
+
       <div id="splitH" class="split split-h" role="separator" aria-orientation="vertical" title="Trascina per ridimensionare il pannello"></div>
 
       <aside id="panel" class="fold open">
@@ -192,68 +245,7 @@
           <div id="panelBody"></div>
         </div>
       </aside>
-    </section>
-
-    <div id="splitV" class="split split-v" role="separator" aria-orientation="horizontal" title="Trascina per ridimensionare video e tabella"></div>
-
-    <section id="eventsPane" class="fold open">
-      <button type="button" class="fold-toggle" id="btnToggleEvents" aria-expanded="true">
-        <span class="chevron" aria-hidden="true">›</span>
-        <span>Eventi</span>
-        <span class="fold-meta" id="eventFoldMeta">0 eventi</span>
-      </button>
-      <div id="eventsInner">
-      <div id="eventsToolbar">
-        <input id="filterText" type="search" placeholder="Filtra eventi, giocatore, esito…" />
-        <div class="menu filter-types" id="filterEventoWrap">
-          <button type="button" id="btnFilterEvento" title="Scegli uno o più tipi di evento">Tutti i tipi ▾</button>
-          <div id="filterEventoMenu" class="menu-pop hidden"></div>
-        </div>
-        <select id="filterSquadra">
-          <option value="">Squadra</option>
-          <option value="Noi">Noi</option>
-          <option value="Loro">Loro</option>
-          <option value="(vuota)">(vuota)</option>
-        </select>
-        <button type="button" id="btnSelectAll">Seleziona visibili</button>
-        <button type="button" id="btnDup">Duplica</button>
-        <button type="button" class="danger-ghost" id="btnDelete" title="Canc">Elimina</button>
-        <div class="spacer"></div>
-        <span class="muted" id="selInfo">Nessuna selezione</span>
-      </div>
-      <div id="inspector">
-        <label>Position <input id="insPosition" placeholder="0:00:00.00" /></label>
-        <label>Duration <input id="insDuration" placeholder="0:00:05.00" /></label>
-        <label>Evento <input id="insEvento" /></label>
-        <label>Squadra <input id="insSquadra" /></label>
-        <label>Chi <input id="insChi" /></label>
-        <label>Esito <input id="insEsito" /></label>
-        <label>Portiere <input id="insPortiere" /></label>
-        <label>Dove <input id="insDove" /></label>
-        <label>Lato <input id="insLato" /></label>
-      </div>
-      <div id="tableWrap">
-        <table id="eventsTable">
-          <thead>
-            <tr>
-              <th></th>
-              <th>#</th>
-              <th>Position</th>
-              <th>Dur</th>
-              <th>Evento</th>
-              <th>Squadra</th>
-              <th>Chi</th>
-              <th>Esito</th>
-              <th>Portiere</th>
-              <th>Dove</th>
-              <th>Lato</th>
-            </tr>
-          </thead>
-          <tbody id="eventsBody"></tbody>
-        </table>
-      </div>
-      </div>
-    </section>
+    </div>
   </div>
 
   <div id="helpOverlay" class="overlay hidden">
@@ -268,7 +260,7 @@
           <ol>
             <li>Live: avvia il cronometro e premi i tasti evento mentre guardi.</li>
             <li>Video: carica il file (o YouTube) e tagga sul current time. Sorgente, riproduzione, sincronizzazione, pannello tagging e lista eventi si aprono con la freccia ›.</li>
-            <li>Al tag, Position = tempo attuale − preroll di quell'evento (es. tag a 0:00:30 con preroll 10s → 0:00:20). La durata è quella in impostazioni. Play clip parte da Position per Duration.</li>
+            <li>Al tag, Position è il momento in cui premi il tasto, così gli eventi restano in ordine cronologico. L'offset (es. −5s, Gol −15s) si applica solo quando riproduci o selezioni l'evento. La durata della clip è quella in impostazioni.</li>
             <li>Dopo ogni evento usa il pannello per Squadra / Chi / Esito.</li>
             <li>Fine primo tempo scarica da solo il CSV <em>…_primo-tempo.csv</em> e mette in pausa il crono.</li>
             <li>Fine partita scarica <em>…_finale.csv</em>. Genera PDF usa gli eventi in pagina (serve.py).</li>
@@ -292,7 +284,7 @@
   <div id="settingsOverlay" class="overlay hidden">
     <div class="sheet">
       <div class="sheet-head">
-        <h2>Rosa, tasti, preroll</h2>
+        <h2>Rosa, tasti, offset</h2>
         <button type="button" id="btnCloseSettings">Chiudi</button>
       </div>
       <div class="settings-grid">
@@ -305,19 +297,19 @@
         <div class="stack nums">
           <label>Durata fallback (s) <input id="cfgDuration" type="number" step="0.5" min="0" /></label>
           <label>Ritardo tagging (s) <input id="cfgDelay" type="number" step="0.1" />
-            <small>Ritardo di reazione, a parte dal preroll: si sottrae al tempo attuale prima di applicare il preroll.</small>
+            <small>Ritardo di reazione: si sottrae al tempo del tasto. L'offset clip è a parte e vale solo in riproduzione.</small>
           </label>
           <label>Portiere sticky
             <select id="cfgStickyKeeper"></select>
           </label>
         </div>
       </div>
-      <h3>Tasti, preroll e durata clip (default Dartfish)</h3>
-      <p class="muted settings-note">Il preroll si sottrae al timestamp al momento del tag: se tagghi a 0:00:30 con preroll 10s, Position diventa 0:00:20 (inizio clip). La durata è la lunghezza della clip da quel punto. Il ritardo tagging è solo il lag di reazione.</p>
+      <h3>Tasti, offset e durata clip</h3>
+      <p class="muted settings-note">Position resta il momento del tasto. L'offset (negativo, es. −5) fa partire la riproduzione prima di Position. Il gol di default è −15s. La durata è la lunghezza della clip da quel punto. Puoi cambiarli per ogni evento.</p>
       <div class="event-cfg-head">
         <span>Evento</span>
         <span>Tasto</span>
-        <span>Preroll</span>
+        <span>Offset</span>
         <span>Durata</span>
         <span></span>
       </div>

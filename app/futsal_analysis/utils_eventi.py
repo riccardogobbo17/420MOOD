@@ -19,7 +19,7 @@ import pandas as pd
 # =========================================================================
 
 ESITI_IN_PORTA = ['Parata', 'Gol', 'Palo']
-TIPOLOGIE_GOL = ['Costruzione', 'Transizione', 'Palla inattiva', 'Errore']
+TIPOLOGIE_GOL = ['Costruzione', 'Transizione', 'Palla inattiva', 'Errore', 'Autogol']
 
 
 def _col(df, name):
@@ -245,6 +245,9 @@ def calcola_ripartenze(df):
 def calcola_tipologia_gol(df):
     """Come nascono i gol: l'Esito dell'evento 'Gol' e' la tipologia dell'azione.
 
+    Gli Autogol sono una tipologia a se: Autogol avversario (Squadra=Loro)
+    conta tra i fatti, Autogol nostro (Squadra=Noi) tra i subiti.
+
     Restituisce {'fatti': {tipologia: n}, 'subiti': {tipologia: n}} con le
     tipologie note sempre presenti (anche a 0) piu' eventuali nuove trovate nel dato.
     """
@@ -252,14 +255,17 @@ def calcola_tipologia_gol(df):
     esito = _col(df, 'esito')
     squadra = _col(df, 'squadra')
 
-    tipologie = list(TIPOLOGIE_GOL)
+    tipologie = [t for t in TIPOLOGIE_GOL if t != 'Autogol']
     for t in sorted(esito[(evento == 'Gol') & (esito != '')].unique()):
-        if t not in tipologie:
+        if t not in tipologie and t != 'Autogol':
             tipologie.append(t)
 
     def conta(lato):
+        avversario = 'Loro' if lato == 'Noi' else 'Noi'
         m_gol = (evento == 'Gol') & (squadra == lato)
+        m_autogol = (evento == 'Autogol') & (squadra == avversario)
         conteggi = {t: int((m_gol & (esito == t)).sum()) for t in tipologie}
+        conteggi['Autogol'] = int(m_autogol.sum())
         conteggi['non_taggato'] = int((m_gol & (esito == '')).sum())
         return conteggi
 

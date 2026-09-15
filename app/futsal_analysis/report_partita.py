@@ -115,6 +115,7 @@ COLORI_TIPOLOGIA = {
     "Transizione": "#c2185b",
     "Palla inattiva": "#f48fb1",
     "Errore": "#880e4f",
+    "Autogol": "#ec407a",
     "non_taggato": "#fce4ec",
 }
 
@@ -194,8 +195,7 @@ VOCI_CONFRONTO = [
     ("Gol", "gol", False),
     ("Tiri totali", "tiri", False),
     ("Tiri in porta", "tiri_in_porta", False),
-    ("Efficacia tiro", "efficacia_tiro_pct", True),
-    ("Conv. Tiri", "conversione_pct", True),
+    ("Precisione tiri", "efficacia_tiro_pct", True),
     ("Parate", "parate", False),
     ("% Parate", "perc_parate", True),
     ("Angoli", "angoli", False),
@@ -440,7 +440,7 @@ def _figura_tipologie_gol(kpi: dict) -> Optional[plt.Figure]:
     if not fatti and not subiti:
         return None
 
-    fig, assi = plt.subplots(1, 2, figsize=(5.8, 2.05))
+    fig, assi = plt.subplots(1, 2, figsize=(5.35, 1.88))
     for ax, dati, titolo in (
         (assi[0], fatti, "Gol fatti"),
         (assi[1], subiti, "Gol subiti"),
@@ -449,7 +449,7 @@ def _figura_tipologie_gol(kpi: dict) -> Optional[plt.Figure]:
             ax.text(0.5, 0.5, "nessun gol", ha="center", va="center",
                     fontsize=8, color=TENUE)
             ax.set_axis_off()
-            ax.set_title(titolo, fontsize=8.5, color=GRIGIO_SCURO, pad=3)
+            ax.set_title(titolo, fontsize=8.0, color=GRIGIO_SCURO, pad=2)
             continue
 
         etichette = list(dati.keys())
@@ -463,20 +463,20 @@ def _figura_tipologie_gol(kpi: dict) -> Optional[plt.Figure]:
             startangle=90,
             wedgeprops={"width": 0.55, "edgecolor": "white", "linewidth": 1.1},
             autopct=lambda p: f"{p:.0f}%" if p >= 8 else "",
-            pctdistance=0.70,
-            labeldistance=1.12,
-            textprops={"fontsize": 6.2, "color": GRIGIO_SCURO},
+            pctdistance=0.68,
+            labeldistance=1.08,
+            textprops={"fontsize": 5.8, "color": GRIGIO_SCURO},
         )
         for t in autotexts:
-            t.set_fontsize(7.5)
+            t.set_fontsize(7.0)
             t.set_color("white")
             t.set_fontweight("bold")
         for t in testi:
-            t.set_fontsize(6.0)
+            t.set_fontsize(5.6)
             t.set_color(GRIGIO_SCURO)
-        ax.set_title(titolo, fontsize=8.5, color=GRIGIO_SCURO, pad=3)
+        ax.set_title(titolo, fontsize=8.0, color=GRIGIO_SCURO, pad=2)
 
-    fig.tight_layout(pad=0.25)
+    fig.tight_layout(pad=0.18)
     return fig
 
 
@@ -611,8 +611,7 @@ def _pagina_executive(df, meta, kpi, stili, larghezza) -> List:
         _figura_confronto(kpi_barre, meta.casa, avversario), larghezza * 0.96,
     ))
     elementi.append(Paragraph(
-        "Efficacia tiro = tiri in porta / tiri totali. "
-        "Conv. Tiri = gol / tiri in porta.",
+        "Precisione tiri = tiri in porta / tiri totali.",
         stili["nota"],
     ))
     elementi.append(Spacer(1, 2))
@@ -620,7 +619,7 @@ def _pagina_executive(df, meta, kpi, stili, larghezza) -> List:
     # 3) Tipologie (senza titolo sezione, per risparmiare spazio in pagina 1)
     figura_tipo = _figura_tipologie_gol(kpi)
     if figura_tipo is not None:
-        img_tipo = _immagine(figura_tipo, larghezza * 0.68)
+        img_tipo = _immagine(figura_tipo, larghezza * 0.60)
         img_tipo.hAlign = "CENTER"
         elementi.append(img_tipo)
 

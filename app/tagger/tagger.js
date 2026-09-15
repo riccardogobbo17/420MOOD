@@ -2,7 +2,21 @@
   "use strict";
 
   const STORAGE_KEY = "fmp-tagger-v1";
-  const CSV_COLS = ["Name", "Position", "Duration", "Data", "Evento", "Portiere", "Squadra", "Chi", "Dove", "Lato", "Esito"];
+  const CSV_COLS = ["Name", "Position", "Duration", "Data", "Evento", "Portiere", "Squadra", "Chi", "Dove", "Lato", "Esito", "Video"];
+  const TABLE_COLS = [
+    { id: "dot", label: "", min: 18, def: 22, resize: false },
+    { id: "#", label: "#", min: 28, def: 36 },
+    { id: "Position", label: "Posizione", min: 64, def: 92 },
+    { id: "Evento", label: "Evento", min: 72, def: 110 },
+    { id: "Video", label: "Video", min: 36, def: 44 },
+    { id: "Esito", label: "Esito", min: 52, def: 88 },
+    { id: "Chi", label: "Chi", min: 48, def: 84 },
+    { id: "Squadra", label: "Squadra", min: 48, def: 68 },
+    { id: "Portiere", label: "Portiere", min: 52, def: 76 },
+    { id: "Dove", label: "Dove", min: 44, def: 64 },
+    { id: "Lato", label: "Lato", min: 40, def: 52 },
+    { id: "Duration", label: "Durata", min: 44, def: 58 },
+  ];
 
   const DEFAULT_PLAYERS = [
     "azza", "deba", "diego jr", "digao", "erick", "fabri",
@@ -11,26 +25,26 @@
   const DEFAULT_KEEPERS = ["bara", "gio"];
 
   let EVENT_DEFS = [
-    { id: "Tiro", shortcut: "z", color: "orange", group: "Azioni", preroll: 8, duration: 13 },
-    { id: "Gol", shortcut: "g", color: "green", group: "Azioni", preroll: 16, duration: 25 },
-    { id: "Assist", shortcut: "", color: "green", group: "Azioni", preroll: 7, duration: 5 },
-    { id: "Autogol", shortcut: "", color: "red", group: "Azioni", preroll: 9, duration: 13 },
-    { id: "Palla recuperata", shortcut: "r", color: "teal", group: "Possesso", preroll: 9, duration: 15 },
-    { id: "Palla persa", shortcut: "e", color: "red", group: "Possesso", preroll: 9, duration: 15 },
-    { id: "Passaggio sbagliato", shortcut: "", color: "red", group: "Possesso", preroll: 6, duration: 12 },
-    { id: "Fallo", shortcut: "", color: "yellow", group: "Falli", preroll: 8, duration: 10 },
-    { id: "Ammonizione", shortcut: "", color: "yellow", group: "Falli", preroll: 8, duration: 12 },
+    { id: "Tiro", shortcut: "z", color: "orange", group: "Azioni", preroll: 5, duration: 13 },
+    { id: "Gol", shortcut: "g", color: "green", group: "Azioni", preroll: 15, duration: 25 },
+    { id: "Assist", shortcut: "", color: "green", group: "Azioni", preroll: 5, duration: 5 },
+    { id: "Autogol", shortcut: "", color: "red", group: "Azioni", preroll: 5, duration: 13 },
+    { id: "Palla recuperata", shortcut: "r", color: "teal", group: "Possesso", preroll: 5, duration: 15 },
+    { id: "Palla persa", shortcut: "e", color: "red", group: "Possesso", preroll: 5, duration: 15 },
+    { id: "Passaggio sbagliato", shortcut: "", color: "red", group: "Possesso", preroll: 5, duration: 12 },
+    { id: "Fallo", shortcut: "", color: "yellow", group: "Falli", preroll: 5, duration: 10 },
+    { id: "Ammonizione", shortcut: "", color: "yellow", group: "Falli", preroll: 5, duration: 12 },
     { id: "Espulsione", shortcut: "", color: "red", group: "Falli", preroll: 5, duration: 10 },
     { id: "Laterale", shortcut: "l", color: "blue", group: "Palle inattive", preroll: 5, duration: 12 },
-    { id: "Angolo", shortcut: "a", color: "blue", group: "Palle inattive", preroll: 4, duration: 12 },
+    { id: "Angolo", shortcut: "a", color: "blue", group: "Palle inattive", preroll: 5, duration: 12 },
     { id: "Punizione", shortcut: "p", color: "blue", group: "Palle inattive", preroll: 5, duration: 13 },
     { id: "Tiro libero", shortcut: "", color: "blue", group: "Palle inattive", preroll: 5, duration: 11 },
-    { id: "Rigore", shortcut: "", color: "blue", group: "Palle inattive", preroll: 9, duration: 14 },
-    { id: "Ripartenza", shortcut: "w", color: "purple", group: "Situazioni", preroll: 9, duration: 15 },
+    { id: "Rigore", shortcut: "", color: "blue", group: "Palle inattive", preroll: 5, duration: 14 },
+    { id: "Ripartenza", shortcut: "w", color: "purple", group: "Situazioni", preroll: 5, duration: 15 },
     { id: "5v4", shortcut: "q", color: "purple", group: "Situazioni", preroll: 5, duration: 10 },
     { id: "4v3", shortcut: "", color: "purple", group: "Situazioni", preroll: 5, duration: 10 },
     { id: "Timeout", shortcut: "t", color: "gray", group: "Situazioni", preroll: 5, duration: 10 },
-    { id: "Da rivedere", shortcut: "v", color: "yellow", group: "Situazioni", preroll: 13, duration: 15 },
+    { id: "Da rivedere", shortcut: "v", color: "yellow", group: "Situazioni", preroll: 5, duration: 15 },
     { id: "Inizio", shortcut: "b", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
     { id: "Fine primo tempo", shortcut: "", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
     { id: "Inizio secondo tempo", shortcut: "", color: "gray", group: "Tempo", preroll: 5, duration: 10 },
@@ -38,7 +52,7 @@
   ];
   const BUILTIN_EVENT_DEFS = EVENT_DEFS.map((e) => ({ ...e }));
   const SHORTCUTS_VERSION = 2;
-  const CLIP_TIMING_VERSION = 1;
+  const CLIP_TIMING_VERSION = 2;
 
   function defaultMap(field) {
     return Object.fromEntries(EVENT_DEFS.map((e) => [e.id, e[field]]));
@@ -69,6 +83,7 @@
     ["Ctrl+E", "Esporta CSV"],
     ["↑ / ↓", "Evento precedente / successivo"],
     ["X / C", "Squadra Noi / Loro"],
+    ["Y", "Video (seduta): Y"],
     ["1 / 2 / 3", "Zona 1 / 2 / 3"],
     ["?", "Questa guida"],
   ];
@@ -195,7 +210,8 @@
   }
 
   function clipRange(ev) {
-    const start = parseTime(ev.Position);
+    const pos = parseTime(ev.Position);
+    const start = clampTime(pos - prerollFor(ev.Evento));
     const dur = parseTime(ev.Duration || formatTime(durationFor(ev.Evento)));
     return { start, end: start + Math.max(0.2, dur) };
   }
@@ -419,16 +435,17 @@
     const row = {
       id: uid(),
       Name: evento,
-      Position: formatTime(clampTime(nowSeconds() - prerollFor(evento))),
+      Position: formatTime(nowSeconds()),
       Duration: formatTime(durationFor(evento)),
       Data: dateCsv(state.matchDate),
       Evento: evento,
       Portiere: state.stickyKeeper || "",
-      Squadra: (evento === "Palla persa" || evento === "Palla recuperata") ? "" : "",
+      Squadra: "",
       Chi: "",
       Dove: "",
       Lato: "",
       Esito: "",
+      Video: "",
     };
     state.events.push(row);
     state.selected = [row.id];
@@ -633,6 +650,7 @@
         Dove: get("Dove") || get("Field Position"),
         Lato: get("Lato"),
         Esito: get("Esito"),
+        Video: get("Video"),
       });
     }
     return out;
@@ -658,6 +676,7 @@
         Dove: e.Dove || "",
         Lato: e.Lato || "",
         Esito: e.Esito || "",
+        Video: e.Video || "",
       };
       lines.push(CSV_COLS.map((c) => csvEscape(row[c])).join(";"));
     }
@@ -714,7 +733,8 @@
         id: e.id,
         name: e.Name || e.Evento,
         evento: e.Evento,
-        start: e.Position,
+        start: formatTime(start),
+        tagPosition: e.Position,
         startSec: start,
         duration: e.Duration,
         durationSec: Math.max(0.2, end - start),
@@ -737,7 +757,7 @@
     if (!clips) return;
     const body = {
       source: sourceForExport(),
-      note: "start = Position (già dopo preroll). duration = Duration. Per un solo video: taglia con ffmpeg e carica a mano su YouTube.",
+      note: "start = Position + offset (impostazioni). Position resta il momento del tasto. duration = Duration.",
       clips,
     };
     downloadFile(
@@ -1214,8 +1234,11 @@
       <button type="button" class="tag noi" data-kw="Squadra" data-val="Noi"><span class="kbd">X</span>Noi</button>
       <button type="button" class="tag loro" data-kw="Squadra" data-val="Loro"><span class="kbd">C</span>Loro</button>
     </div></div>`;
-
     const prim = primaryEvent();
+    html += `<div class="group"><h4>Seduta video</h4><div class="btns">
+      <button type="button" class="tag${prim && prim.Video === "Y" ? " active" : ""}" data-kw="Video" data-val="Y"><span class="kbd">Y</span>Video</button>
+    </div></div>`;
+
     const esiti = prim ? (ESITI_BY_EVENT[prim.Evento] || []) : [];
     const allEsiti = [...new Set([
       ...esiti,
@@ -1304,19 +1327,16 @@
         play.has(e.id) ? "playhead" : "",
         e.id === state.flashId ? "flash" : "",
       ].join(" ");
-      return `<tr class="${cls}" data-id="${e.id}">
-        <td><span class="dot" style="background:var(--${colorToVar(colorFor(e.Evento))})"></span></td>
-        <td class="num">${i + 1}</td>
-        <td class="num">${esc(e.Position)}</td>
-        <td class="num">${esc(shortDur(e.Duration))}</td>
-        <td>${esc(e.Evento)}</td>
-        <td>${esc(e.Squadra)}</td>
-        <td>${esc(e.Chi)}</td>
-        <td>${esc(e.Esito)}</td>
-        <td>${esc(e.Portiere)}</td>
-        <td>${esc(e.Dove)}</td>
-        <td>${esc(e.Lato)}</td>
-      </tr>`;
+      const cells = TABLE_COLS.map((col) => {
+        if (col.id === "dot") {
+          return `<td><span class="dot" style="background:var(--${colorToVar(colorFor(e.Evento))})"></span></td>`;
+        }
+        if (col.id === "#") return `<td class="num">${i + 1}</td>`;
+        if (col.id === "Duration") return `<td class="num">${esc(shortDur(e.Duration))}</td>`;
+        if (col.id === "Position") return `<td class="num">${esc(e.Position)}</td>`;
+        return `<td>${esc(e[col.id] || "")}</td>`;
+      }).join("");
+      return `<tr class="${cls}" data-id="${e.id}">${cells}</tr>`;
     }).join("");
     if (state.flashId) setTimeout(() => { state.flashId = null; }, 700);
     renderInspector();
@@ -1333,6 +1353,64 @@
     $("selInfo").textContent = n ? `${n} selezionat${n === 1 ? "o" : "i"}` : "Nessuna selezione";
     renderSyncMeta();
     renderTimeline();
+    applyColWidths();
+  }
+
+  function colWidth(id) {
+    const def = TABLE_COLS.find((c) => c.id === id);
+    const w = Number((state.layout.colW || {})[id]);
+    const min = def ? def.min : 40;
+    const fallback = def ? def.def : 80;
+    return Math.max(min, Number.isFinite(w) && w > 0 ? w : fallback);
+  }
+
+  function applyColWidths() {
+    const table = $("eventsTable");
+    const cols = $("eventsCols");
+    const head = $("eventsHead");
+    if (!table || !cols || !head) return;
+    let total = 0;
+    cols.innerHTML = TABLE_COLS.map((c) => {
+      const w = colWidth(c.id);
+      total += w;
+      return `<col data-col="${c.id}" style="width:${w}px">`;
+    }).join("");
+    table.style.width = total + "px";
+    head.innerHTML = TABLE_COLS.map((c) => {
+      const handle = c.resize === false ? "" : `<span class="col-resizer" data-col="${c.id}"></span>`;
+      return `<th data-col="${c.id}">${esc(c.label)}${handle}</th>`;
+    }).join("");
+  }
+
+  function bindColResize() {
+    const app = $("app");
+    $("eventsTable").addEventListener("mousedown", (e) => {
+      const handle = e.target.closest(".col-resizer");
+      if (!handle) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const id = handle.dataset.col;
+      const def = TABLE_COLS.find((c) => c.id === id);
+      if (!def || def.resize === false) return;
+      const startX = e.clientX;
+      const startW = colWidth(id);
+      handle.classList.add("dragging");
+      app.classList.add("dragging-col");
+      const move = (ev) => {
+        const w = Math.max(def.min, Math.min(420, startW + (ev.clientX - startX)));
+        state.layout.colW = { ...(state.layout.colW || {}), [id]: Math.round(w) };
+        applyColWidths();
+      };
+      const up = () => {
+        handle.classList.remove("dragging");
+        app.classList.remove("dragging-col");
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+        persist();
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    });
   }
 
   function colorToVar(c) {
@@ -1346,7 +1424,7 @@
 
   function renderInspector() {
     const e = primaryEvent();
-    const fields = ["Position", "Duration", "Evento", "Squadra", "Chi", "Esito", "Portiere", "Dove", "Lato"];
+    const fields = ["Position", "Evento", "Video", "Esito", "Chi", "Squadra", "Portiere", "Dove", "Lato", "Duration"];
     for (const f of fields) {
       const el = $("ins" + f);
       if (!el) continue;
@@ -1489,7 +1567,8 @@
     if (!Number.isFinite(frac) && L.stageH && L.eventsH) {
       frac = L.eventsH / (Number(L.stageH) + Number(L.eventsH));
     }
-    if (!Number.isFinite(frac) || frac < 0.16 || frac > 0.5) frac = 0.32;
+    if (!Number.isFinite(frac) || frac < 0.08) frac = 0.22;
+    if (frac > 0.92) frac = 0.92;
     state.layout.eventsFrac = frac;
     const pct = Math.round(frac * 100) + "%";
     app.style.setProperty("--events-pct", pct);
@@ -1498,8 +1577,12 @@
       if (state.eventsOpen === false) {
         pane.style.flex = "";
         pane.style.maxHeight = "";
+      } else if (state.mode === "live") {
+        pane.style.flex = "1 1 0";
+        pane.style.maxHeight = "none";
       } else {
         pane.style.flex = `0 1 ${pct}`;
+        pane.style.maxHeight = "calc(100% - 48px)";
       }
     }
     const maxPanel = Math.max(180, Math.floor((app.clientWidth || window.innerWidth) * 0.42));
@@ -1509,6 +1592,7 @@
     }
     app.style.removeProperty("--stage-h");
     app.style.removeProperty("--events-h");
+    applyColWidths();
   }
 
   function bindSplitters() {
@@ -1531,17 +1615,18 @@
       });
     }
     drag($("splitV"), "v", (ev) => {
-      const rect = app.getBoundingClientRect();
-      const frac = (rect.bottom - ev.clientY) / Math.max(1, rect.height);
-      state.layout.eventsFrac = Math.max(0.16, Math.min(0.48, frac));
+      const col = ($("mainCol") || app).getBoundingClientRect();
+      const frac = (col.bottom - ev.clientY) / Math.max(1, col.height);
+      state.layout.eventsFrac = Math.max(0.08, Math.min(0.92, frac));
       applyLayout();
     });
     drag($("splitH"), "h", (ev) => {
-      const stage = $("stage").getBoundingClientRect();
-      const panelW = Math.max(220, Math.min(stage.width - 220, stage.right - ev.clientX));
+      const ws = ($("workspace") || app).getBoundingClientRect();
+      const panelW = Math.max(200, Math.min(ws.width - 200, ws.right - ev.clientX));
       state.layout.panelW = Math.round(panelW);
       applyLayout();
     });
+    bindColResize();
   }
 
   function renderAll() {
@@ -1578,7 +1663,7 @@
     renderTable();
     renderPanel();
     const ev = primaryEvent();
-    if (state.mode === "video" && ev && hasMedia()) mediaSeek(parseTime(ev.Position));
+    if (state.mode === "video" && ev && hasMedia()) mediaSeek(clipRange(ev).start);
   }
 
   function moveSelection(dir) {
@@ -1655,6 +1740,7 @@
     if (!key || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (key === "x") { applyKeyword("Squadra", "Noi"); ev.preventDefault(); return; }
     if (key === "c") { applyKeyword("Squadra", "Loro"); ev.preventDefault(); return; }
+    if (key === "y") { applyKeyword("Video", "Y"); ev.preventDefault(); return; }
     const zone = ZONE_DEFS.find((z) => z.key === key);
     if (zone) { applyKeyword("Dove", zone.label); ev.preventDefault(); return; }
 
@@ -2098,7 +2184,7 @@
       `<div class="event-cfg-row">
         <span>${esc(d.id)}</span>
         <input data-sc="${esc(d.id)}" maxlength="1" value="${esc(state.shortcuts[d.id] || "")}" title="Tasto" />
-        <input data-pr="${esc(d.id)}" type="number" step="0.5" min="0" value="${prerollFor(d.id)}" title="Preroll (s)" />
+        <input data-pr="${esc(d.id)}" type="number" step="0.5" value="${-prerollFor(d.id)}" title="Offset riproduzione (s)" />
         <input data-du="${esc(d.id)}" type="number" step="0.5" min="0" value="${durationFor(d.id)}" title="Durata (s)" />
         <button type="button" class="danger-ghost" data-del="${esc(d.id)}" title="Rimuovi">×</button>
       </div>`
@@ -2120,7 +2206,7 @@
       if (input.dataset.sc) nextSc[input.dataset.sc] = input.value.trim().toLowerCase();
       if (input.dataset.pr) {
         const n = Number(input.value);
-        nextPr[input.dataset.pr] = Number.isFinite(n) ? Math.max(0, n) : prerollFor(input.dataset.pr);
+        nextPr[input.dataset.pr] = Number.isFinite(n) ? Math.abs(n) : prerollFor(input.dataset.pr);
       }
       if (input.dataset.du) {
         const n = Number(input.value);
@@ -2365,8 +2451,9 @@
     $("btnDelete").onclick = deleteSelected;
     $("btnDup").onclick = duplicateSelected;
 
-    for (const f of ["Position", "Duration", "Evento", "Squadra", "Chi", "Esito", "Portiere", "Dove", "Lato"]) {
+    for (const f of ["Position", "Evento", "Video", "Esito", "Chi", "Squadra", "Portiere", "Dove", "Lato", "Duration"]) {
       const el = $("ins" + f);
+      if (!el) continue;
       el.addEventListener("change", () => commitInspector(f, el.value.trim()));
       el.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") { ev.preventDefault(); el.blur(); }

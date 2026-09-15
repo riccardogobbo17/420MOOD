@@ -5,7 +5,7 @@
       "shortcut": "z",
       "color": "orange",
       "group": "Azioni",
-      "preroll": 8.0,
+      "preroll": 5.0,
       "duration": 13.0
     },
     {
@@ -13,7 +13,7 @@
       "shortcut": "g",
       "color": "green",
       "group": "Azioni",
-      "preroll": 16.0,
+      "preroll": 15.0,
       "duration": 25.0
     },
     {
@@ -21,7 +21,7 @@
       "shortcut": "",
       "color": "green",
       "group": "Azioni",
-      "preroll": 7.0,
+      "preroll": 5.0,
       "duration": 5.0
     },
     {
@@ -29,7 +29,7 @@
       "shortcut": "",
       "color": "red",
       "group": "Azioni",
-      "preroll": 9.0,
+      "preroll": 5.0,
       "duration": 13.0
     },
     {
@@ -37,7 +37,7 @@
       "shortcut": "r",
       "color": "teal",
       "group": "Possesso",
-      "preroll": 9.0,
+      "preroll": 5.0,
       "duration": 15.0
     },
     {
@@ -45,7 +45,7 @@
       "shortcut": "e",
       "color": "red",
       "group": "Possesso",
-      "preroll": 9.0,
+      "preroll": 5.0,
       "duration": 15.0
     },
     {
@@ -53,7 +53,7 @@
       "shortcut": "",
       "color": "red",
       "group": "Possesso",
-      "preroll": 6.0,
+      "preroll": 5.0,
       "duration": 12.0
     },
     {
@@ -61,7 +61,7 @@
       "shortcut": "",
       "color": "yellow",
       "group": "Falli",
-      "preroll": 8.0,
+      "preroll": 5.0,
       "duration": 10.0
     },
     {
@@ -69,7 +69,7 @@
       "shortcut": "",
       "color": "yellow",
       "group": "Falli",
-      "preroll": 8.0,
+      "preroll": 5.0,
       "duration": 12.0
     },
     {
@@ -93,7 +93,7 @@
       "shortcut": "a",
       "color": "blue",
       "group": "Palle inattive",
-      "preroll": 4.0,
+      "preroll": 5.0,
       "duration": 12.0
     },
     {
@@ -117,7 +117,7 @@
       "shortcut": "",
       "color": "blue",
       "group": "Palle inattive",
-      "preroll": 9.0,
+      "preroll": 5.0,
       "duration": 14.0
     },
     {
@@ -125,7 +125,7 @@
       "shortcut": "w",
       "color": "purple",
       "group": "Situazioni",
-      "preroll": 9.0,
+      "preroll": 5.0,
       "duration": 15.0
     },
     {
@@ -157,7 +157,7 @@
       "shortcut": "v",
       "color": "yellow",
       "group": "Situazioni",
-      "preroll": 13.0,
+      "preroll": 5.0,
       "duration": 15.0
     },
     {
