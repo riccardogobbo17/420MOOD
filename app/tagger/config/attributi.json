@@ -1,0 +1,60 @@
+{
+  "esiti": {
+    "Tiro": [
+      "Parata",
+      "Gol",
+      "Palo",
+      "Fuori",
+      "Ribattuto",
+      "Assist"
+    ],
+    "Punizione": [
+      "Parata",
+      "Gol",
+      "Palo",
+      "Fuori",
+      "Ribattuto"
+    ],
+    "Tiro libero": [
+      "Parata",
+      "Gol",
+      "Palo",
+      "Fuori",
+      "Ribattuto"
+    ],
+    "Rigore": [
+      "Parata",
+      "Gol",
+      "Palo",
+      "Fuori",
+      "Ribattuto"
+    ],
+    "Gol": [
+      "Costruzione",
+      "Transizione",
+      "Palla Inattiva",
+      "Errore",
+      "Az. Personale",
+      "Rigore",
+      "Tiro Libero"
+    ],
+    "Fallo": [
+      "Ammonizione",
+      "Espulsione"
+    ]
+  },
+  "zone": [
+    {
+      "key": "1",
+      "label": "Zona 1"
+    },
+    {
+      "key": "2",
+      "label": "Zona 2"
+    },
+    {
+      "key": "3",
+      "label": "Zona 3"
+    }
+  ]
+}

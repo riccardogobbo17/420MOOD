@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 
 from supabase import create_client, Client
+# Pagina archiviata: i nomi tabella arrivano comunque dalla config condivisa
+# per non dover aggiornare le stringhe in due posti a inizio stagione.
+from futsal_analysis.config_supabase import TABELLA_PARTITE, TABELLA_EVENTI
 
 import numpy as np
 
@@ -902,7 +905,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -- 1. Caricamento partite da Supabase --
-partite = supabase.table("partite").select("*").order("data", desc=True).execute().data
+partite = supabase.table(TABELLA_PARTITE).select("*").order("data", desc=True).execute().data
 df_partite = pd.DataFrame(partite)
 
 # -- 2. Selezione partita --
@@ -915,7 +918,7 @@ partita_scelta = st.selectbox(
 )
 
 # -- 3. Caricamento eventi della partita selezionata --
-eventi = supabase.table("eventi").select("*").eq("partita_id", partita_scelta).order("posizione").execute().data
+eventi = supabase.table(TABELLA_EVENTI).select("*").eq("partita_id", partita_scelta).order("posizione").execute().data
 df = pd.DataFrame(eventi)
 
 # -- 4. Calcolo tempi e colonna periodo --

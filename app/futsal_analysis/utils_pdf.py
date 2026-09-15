@@ -32,6 +32,322 @@ class PdfImageSection:
     max_width: int = 380
 
 
+@dataclass
+class PdfMatchMeta:
+    """Metadati copertina report partita."""
+
+    home_name: str = "FMP"
+    away_name: str = "Avversario"
+    home_goals: int = 0
+    away_goals: int = 0
+    competition: str = ""
+    match_date: str = ""
+    category: str = ""
+
+
+def _format_kpi_value(value: object, is_pct: bool = False) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "—"
+    if is_pct:
+        return f"{value:.0f}%" if float(value).is_integer() else f"{value:.1f}%"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _build_cover_elements(
+    meta: PdfMatchMeta,
+    timeline_df: Optional[pd.DataFrame],
+    styles,
+    page_width: float,
+) -> List:
+    """Copertina: score, meta, timeline gol."""
+    elements: List = []
+
+    brand = ParagraphStyle(
+        "CoverBrand",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        textColor=colors.HexColor("#1565c0"),
+        alignment=1,
+        spaceAfter=4,
+    )
+    meta_style = ParagraphStyle(
+        "CoverMeta",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#64748b"),
+        alignment=1,
+        spaceAfter=2,
+    )
+    score_style = ParagraphStyle(
+        "CoverScore",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=28,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=1,
+        leading=32,
+    )
+    team_style = ParagraphStyle(
+        "CoverTeam",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=1,
+    )
+    section_style = ParagraphStyle(
+        "CoverSection",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        textColor=colors.HexColor("#1565c0"),
+        spaceBefore=10,
+        spaceAfter=4,
+    )
+    goal_style = ParagraphStyle(
+        "CoverGoal",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#334155"),
+        leading=11,
+    )
+
+    elements.append(Paragraph("FMP MATCH REPORT", brand))
+    meta_bits = [b for b in [meta.competition, meta.match_date, meta.category] if b]
+    if meta_bits:
+        elements.append(Paragraph(" · ".join(meta_bits), meta_style))
+    elements.append(Spacer(1, 10))
+
+    score_table = Table(
+        [
+            [
+                Paragraph(meta.home_name, team_style),
+                Paragraph(f"{meta.home_goals}  –  {meta.away_goals}", score_style),
+                Paragraph(meta.away_name, team_style),
+            ]
+        ],
+        colWidths=[page_width * 0.35, page_width * 0.30, page_width * 0.35],
+    )
+    score_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#cbd5e1")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 14),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    elements.append(score_table)
+
+    if timeline_df is not None and not timeline_df.empty:
+        elements.append(Paragraph("TIMELINE GOL", section_style))
+        rows = [["Minuto", "Squadra", "Marcatore", "Tipo azione"]]
+        for _, row in timeline_df.iterrows():
+            rows.append(
+                [
+                    str(row.get("Minuto", "")),
+                    str(row.get("Squadra", "")),
+                    str(row.get("Marcatore", "")),
+                    str(row.get("Tipo Azione", "")),
+                ]
+            )
+        tl = Table(rows, colWidths=[page_width * 0.15, page_width * 0.18, page_width * 0.34, page_width * 0.33])
+        tl.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("ALIGN", (0, 0), (1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ]
+            )
+        )
+        elements.append(tl)
+
+    elements.append(PageBreak())
+    return elements
+
+
+def _build_kpi_dashboard_elements(
+    kpi: dict,
+    home_name: str,
+    away_name: str,
+    styles,
+    page_width: float,
+) -> List:
+    """Pagina KPI executive Noi vs Loro."""
+    elements: List = []
+    title_style = ParagraphStyle(
+        "KpiTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=1,
+        spaceAfter=8,
+    )
+    label_style = ParagraphStyle(
+        "KpiLabel",
+        parent=styles["Normal"],
+        fontSize=7,
+        textColor=colors.HexColor("#64748b"),
+        alignment=1,
+        leading=9,
+    )
+    value_style = ParagraphStyle(
+        "KpiValue",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=1,
+        leading=13,
+    )
+    head_style = ParagraphStyle(
+        "KpiHead",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        textColor=colors.white,
+        alignment=1,
+    )
+
+    noi = kpi.get("Noi", {})
+    loro = kpi.get("Loro", {})
+
+    elements.append(Paragraph("KPI EXECUTIVE DASHBOARD", title_style))
+
+    rows_def = [
+        ("Gol", "gol", False),
+        ("Assist", "assist", False),
+        ("Tiri totali", "tiri", False),
+        ("Tiri in porta", "tiri_in_porta", False),
+        ("Precisione tiri", "efficacia_tiro_pct", True),
+        ("Recuperi", "recuperi", False),
+        ("Palle perse", "perse", False),
+        ("Falli", "falli", False),
+        ("Parate", "parate", False),
+        ("% Parate", "perc_parate", True),
+        ("Angoli", "angoli", False),
+        ("Laterali", "laterali", False),
+        ("Punizioni", "punizioni", False),
+    ]
+
+    header = [
+        Paragraph("Indicatore", head_style),
+        Paragraph(home_name or "FMP", head_style),
+        Paragraph(away_name or "Avversario", head_style),
+    ]
+    data = [header]
+    for label, key, is_pct in rows_def:
+        data.append(
+            [
+                Paragraph(label, label_style),
+                Paragraph(_format_kpi_value(noi.get(key), is_pct=is_pct), value_style),
+                Paragraph(_format_kpi_value(loro.get(key), is_pct=is_pct), value_style),
+            ]
+        )
+
+    def stile_blocco() -> TableStyle:
+        return TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+                ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f1f5f9")),
+                ("ROWBACKGROUNDS", (1, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+
+    # Layout a due colonne: KPI a sinistra, tipologia gol a destra, cosi' la
+    # pagina resta una sola anche quando si aggiungono indicatori.
+    kpi_width = page_width * 0.58
+    goal_width = page_width * 0.38
+    gap = page_width * 0.04
+
+    table = Table(data, colWidths=[kpi_width * 0.40, kpi_width * 0.30, kpi_width * 0.30], hAlign="LEFT")
+    table.setStyle(stile_blocco())
+
+    # Tipologia dei gol (Esito dell'evento Gol): come li facciamo, come li prendiamo.
+    tipologia = kpi.get("tipologia_gol") or {}
+    fatti = tipologia.get("fatti", {})
+    subiti = tipologia.get("subiti", {})
+    voci = [k for k in fatti.keys() if fatti.get(k) or subiti.get(k)]
+
+    colonna_destra: List = []
+    if voci:
+        rows = [[
+            Paragraph("Come nascono i gol", head_style),
+            Paragraph("Fatti", head_style),
+            Paragraph("Subiti", head_style),
+        ]]
+        for voce in voci:
+            rows.append(
+                [
+                    Paragraph(str(voce).replace("_", " ").capitalize(), label_style),
+                    Paragraph(_format_kpi_value(fatti.get(voce)), value_style),
+                    Paragraph(_format_kpi_value(subiti.get(voce)), value_style),
+                ]
+            )
+        goal_table = Table(rows, colWidths=[goal_width * 0.48, goal_width * 0.26, goal_width * 0.26], hAlign="LEFT")
+        goal_table.setStyle(stile_blocco())
+        colonna_destra = [goal_table]
+
+    layout = Table(
+        [[table, "", colonna_destra or ""]],
+        colWidths=[kpi_width, gap, goal_width],
+        hAlign="CENTER",
+    )
+    layout.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    elements.append(layout)
+
+    note = ParagraphStyle(
+        "KpiNote",
+        parent=styles["Normal"],
+        fontSize=7,
+        textColor=colors.HexColor("#94a3b8"),
+        spaceBefore=10,
+        leading=9,
+    )
+    elements.append(
+        Paragraph(
+            "Nota: recuperi e palle perse sono taggati solo per FMP. Le punizioni non "
+            "entrano nel conteggio tiri, ma le punizioni parate contano come parata.",
+            note,
+        )
+    )
+    elements.append(PageBreak())
+    return elements
+
+
 def _format_value(value: object) -> str:
     """Formatta un valore qualsiasi in stringa per il PDF."""
 
@@ -184,8 +500,13 @@ def generate_pdf_report(
     table_sections: Optional[Sequence[PdfTableSection]] = None,
     image_sections: Optional[Sequence[PdfImageSection]] = None,
     compact_tables: bool = False,
+    match_meta: Optional[PdfMatchMeta] = None,
+    kpi_executive: Optional[dict] = None,
 ) -> bytes:
-    """Genera un PDF con sezioni tabellari e immagini."""
+    """Genera un PDF con sezioni tabellari e immagini.
+
+    Se passati match_meta / kpi_executive, antepone copertina + dashboard KPI.
+    """
 
     buffer = BytesIO()
     
@@ -197,10 +518,12 @@ def generate_pdf_report(
         "Perse e Recuperate",
         "Falli",
     )
+    has_cover = match_meta is not None or kpi_executive is not None
     has_only_live = (
         bool(table_sections_list_temp)
         and all(sec.title in live_section_titles or sec.title in ("Risultato", "Timeline Gol") for sec in table_sections_list_temp)
         and not image_sections
+        and not has_cover
     )
     
     doc = SimpleDocTemplate(
@@ -282,9 +605,31 @@ def generate_pdf_report(
     column_gap = 12
     column_width = (available_width - (column_gap * 2)) / 3.0
 
-    elements: List = [Paragraph(title, title_style)]
+    elements: List = []
 
     table_sections_list: List[PdfTableSection] = list(table_sections or [])
+
+    # Estrai timeline prima della copertina (se presente)
+    timeline_for_cover = None
+    for sec in table_sections_list:
+        if sec.title == "Timeline Gol" and sec.dataframe is not None and not sec.dataframe.empty:
+            timeline_for_cover = sec.dataframe.copy()
+            break
+
+    if match_meta is not None:
+        elements.extend(
+            _build_cover_elements(match_meta, timeline_for_cover, styles, available_width)
+        )
+
+    if kpi_executive is not None:
+        home = match_meta.home_name if match_meta else "FMP"
+        away = match_meta.away_name if match_meta else "Avversario"
+        elements.extend(
+            _build_kpi_dashboard_elements(kpi_executive, home, away, styles, available_width)
+        )
+
+    # Titolo sezioni dettagliate (dopo cover/KPI)
+    elements.append(Paragraph(title, title_style))
 
     def pop_section_by_title(section_title: str) -> Optional[PdfTableSection]:
         for idx, sec in enumerate(table_sections_list):
@@ -345,6 +690,11 @@ def generate_pdf_report(
     timeline_section = pop_section_by_title("Timeline Gol")
     durata_section = pop_section_by_title("Minutaggi - Durata Partita")
     summary_rendered = False
+    # Con la copertina attiva risultato e timeline sono gia' in prima pagina:
+    # ripeterli qui creerebbe una pagina duplicata.
+    if match_meta is not None:
+        result_section = None
+        timeline_section = None
     if result_section or timeline_section or durata_section:
         if result_section:
             result_table = build_section_table(result_section, column_width)

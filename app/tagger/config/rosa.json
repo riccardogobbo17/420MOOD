@@ -1,0 +1,27 @@
+{
+  "giocatori": [
+    "bara",
+    "gio",
+    "stella",
+    "ale",
+    "azza",
+    "david",
+    "diego",
+    "erick",
+    "fabri",
+    "igor",
+    "lollo",
+    "mattia",
+    "nic",
+    "ricky",
+    "scanta",
+    "tende",
+    "zanna"
+  ],
+  "portieri": [
+    "bara",
+    "gio",
+    "stella"
+  ],
+  "portiere_sticky": "stella"
+}
